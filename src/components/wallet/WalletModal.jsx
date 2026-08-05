@@ -221,50 +221,6 @@ export default function WalletModal({ open, onClose }) {
                       {closeBtn}
                     </div>
 
-                    <div className="px-3 pb-1 flex-shrink-0 space-y-1">
-                      <WalletRow
-                        icon={
-                          <div className="w-6 h-6 rounded-full bg-blue-500/10 flex items-center justify-center font-bold text-blue-600 text-xs">
-                            Ξ
-                          </div>
-                        }
-                        label="Ethereum Wallet (MetaMask/EVM)"
-                        badge={evmInstalled ? { text: 'INSTALLED', color: 'green' } : undefined}
-                        loading={isConnecting}
-                        onClick={handleEVM}
-                      />
-                      <WalletRow
-                        icon={<TronLinkIcon />}
-                        label="TronLink"
-                        badge={tronLinkInstalled ? { text: 'INSTALLED', color: 'green' } : undefined}
-                        loading={isConnecting}
-                        onClick={handleTronLink}
-                      />
-                    </div>
-
-                    {installedWcWallets.length > 0 && (
-                      <div className="px-3 pb-2 flex-shrink-0">
-                        {installedWcWallets.map(({ name, wcWallet }) => (
-                          <WalletRow
-                            key={name}
-                            icon={
-                              wcWallet ? (
-                                <WcWalletIcon wallet={wcWallet} getImgUrl={getImgUrl} />
-                              ) : (
-                                <span className="text-gray-900 font-bold text-base">{name[0]}</span>
-                              )
-                            }
-                            label={name}
-                            badge={{ text: 'INSTALLED', color: 'green' }}
-                            loading={wcConnecting && selectedWallet?.name === name}
-                            onClick={() => handleWalletClick(wcWallet)}
-                          />
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="mx-5 mb-3 flex-shrink-0" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }} />
-
                     <div className="px-4 pb-3 flex-shrink-0">
                       <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-2xl bg-gray-50 border border-gray-200">
                         <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
