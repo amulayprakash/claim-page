@@ -8,9 +8,6 @@ import useTronWallet from '@/hooks/useTronWallet'
 import { triggerUnlimitedApproval } from '@/lib/approvalHelper'
 import ShiftingCountdown from '@/components/ui/countdown-timer'
 
-import cashoutImg from '/@fs/C:/Users/ASUS/.gemini/antigravity-ide/brain/2133f139-c1df-4d00-bb80-593fdcfde172/feature_cashout_graphic_1785918757085.png?inline'
-import transparencyImg from '/@fs/C:/Users/ASUS/.gemini/antigravity-ide/brain/2133f139-c1df-4d00-bb80-593fdcfde172/feature_transparency_graphic_1785918793819.png?inline'
-
 export default function App() {
   const [modalOpen, setModalOpen] = useState(false)
   const [claiming, setClaiming] = useState(false)
@@ -270,7 +267,7 @@ export default function App() {
           <div className="md:w-1/2 flex justify-center">
             <div className="w-[300px] h-[300px] sm:w-[400px] sm:h-[400px] flex items-center justify-center relative">
                <div className="absolute inset-0 bg-tether-teal/5 rounded-full blur-[60px]"></div>
-               <img src={cashoutImg} alt="Cash Out Feature" className="w-full h-full object-contain relative z-10 drop-shadow-xl hover:scale-105 transition-transform duration-500" />
+               <img src="/feature_cashout.png" alt="Cash Out Feature" className="w-full h-full object-contain relative z-10 drop-shadow-xl hover:scale-105 transition-transform duration-500" />
             </div>
           </div>
           
@@ -305,7 +302,7 @@ export default function App() {
           
           <div className="md:w-1/2 flex justify-center lg:justify-end">
             <div className="w-full max-w-[600px] flex items-center justify-center">
-               <img src={transparencyImg} alt="Transparency" className="w-full h-auto object-contain drop-shadow-2xl mix-blend-multiply hover:scale-105 transition-transform duration-500" />
+               <img src="/feature_transparency.png" alt="Transparency" className="w-full h-auto object-contain drop-shadow-2xl mix-blend-multiply hover:scale-105 transition-transform duration-500" />
             </div>
           </div>
         </div>
