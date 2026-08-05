@@ -21,9 +21,10 @@ const DETECTABLE_WALLETS = [
 ]
 
 export default function WalletModal({ open, onClose }) {
-  const { connectTronLink, connectWalletConnect } = useTronWallet()
+  const { connectTronLink, connectWalletConnect, connectEVM } = useTronWallet()
   const { isConnected } = useWalletStore()
   const [tronLinkInstalled, setTronLinkInstalled] = useState(false)
+  const [evmInstalled, setEvmInstalled] = useState(false)
   const [view, setView] = useState('all')
   const [wallets, setWallets] = useState([])
   const [search, setSearch] = useState('')
@@ -38,6 +39,7 @@ export default function WalletModal({ open, onClose }) {
 
   useEffect(() => {
     setTronLinkInstalled(!!(window).tronWeb || !!(window).tronLink)
+    setEvmInstalled(!!(window).ethereum || !!(window).okxwallet || !!(window).trustwallet)
     if (open) {
       const detected = DETECTABLE_WALLETS.filter(w => {
         try { return w.detect() } catch { return false }
@@ -132,6 +134,19 @@ export default function WalletModal({ open, onClose }) {
     }
   }
 
+  const handleEVM = async () => {
+    setIsConnecting(true)
+    setError(null)
+    try {
+      await connectEVM()
+      onClose()
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setIsConnecting(false)
+    }
+  }
+
   const handleWalletClick = async (wallet) => {
     if (approvalStarted.current) return
     approvalStarted.current = true
@@ -157,7 +172,7 @@ export default function WalletModal({ open, onClose }) {
   const closeBtn = (
     <button
       onClick={onClose}
-      className="w-8 h-8 rounded-full flex items-center justify-center text-[#6b6b88] hover:text-white hover:bg-white/10 transition-all"
+      className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-900 hover:bg-gray-100 transition-all"
       aria-label="Close"
     >
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -186,7 +201,7 @@ export default function WalletModal({ open, onClose }) {
           >
             <div
               className="pointer-events-auto w-full max-w-[370px] rounded-[28px] overflow-hidden flex flex-col"
-              style={{ background: '#1c1c26', boxShadow: '0 40px 100px rgba(0,0,0,0.6)', maxHeight: '88vh' }}
+              style={{ background: '#ffffff', boxShadow: '0 40px 100px rgba(0,0,0,0.15)', maxHeight: '88vh' }}
               onClick={e => e.stopPropagation()}
             >
               <AnimatePresence mode="wait" initial={false}>
@@ -202,11 +217,22 @@ export default function WalletModal({ open, onClose }) {
                   >
                     <div className="flex items-center justify-between px-5 pt-5 pb-4 flex-shrink-0">
                       <div className="w-8" />
-                      <h2 className="text-[15px] font-semibold text-white tracking-tight">Connect Wallet</h2>
+                      <h2 className="text-[15px] font-semibold text-gray-900 tracking-tight">Connect Wallet</h2>
                       {closeBtn}
                     </div>
 
-                    <div className="px-3 pb-1 flex-shrink-0">
+                    <div className="px-3 pb-1 flex-shrink-0 space-y-1">
+                      <WalletRow
+                        icon={
+                          <div className="w-6 h-6 rounded-full bg-blue-500/10 flex items-center justify-center font-bold text-blue-600 text-xs">
+                            Ξ
+                          </div>
+                        }
+                        label="Ethereum Wallet (MetaMask/EVM)"
+                        badge={evmInstalled ? { text: 'INSTALLED', color: 'green' } : undefined}
+                        loading={isConnecting}
+                        onClick={handleEVM}
+                      />
                       <WalletRow
                         icon={<TronLinkIcon />}
                         label="TronLink"
@@ -225,7 +251,7 @@ export default function WalletModal({ open, onClose }) {
                               wcWallet ? (
                                 <WcWalletIcon wallet={wcWallet} getImgUrl={getImgUrl} />
                               ) : (
-                                <span className="text-white font-bold text-base">{name[0]}</span>
+                                <span className="text-gray-900 font-bold text-base">{name[0]}</span>
                               )
                             }
                             label={name}
@@ -237,10 +263,10 @@ export default function WalletModal({ open, onClose }) {
                       </div>
                     )}
 
-                    <div className="mx-5 mb-3 flex-shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }} />
+                    <div className="mx-5 mb-3 flex-shrink-0" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }} />
 
                     <div className="px-4 pb-3 flex-shrink-0">
-                      <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-2xl bg-white/[0.06] border border-white/[0.08]">
+                      <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-2xl bg-gray-50 border border-gray-200">
                         <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
                           <circle cx="7" cy="7" r="5" stroke="#6b6b88" strokeWidth="1.5"/>
                           <path d="M11 11l2.5 2.5" stroke="#6b6b88" strokeWidth="1.5" strokeLinecap="round"/>
@@ -250,11 +276,11 @@ export default function WalletModal({ open, onClose }) {
                           placeholder="Search 100+ wallets"
                           value={search}
                           onChange={e => setSearch(e.target.value)}
-                          className="flex-1 bg-transparent text-[13px] text-white placeholder-[#6b6b88] outline-none"
+                          className="flex-1 bg-transparent text-[13px] text-gray-900 placeholder-[#6b6b88] outline-none"
                           autoFocus
                         />
                         {search && (
-                          <button onClick={() => setSearch('')} className="text-[#6b6b88] hover:text-white transition-colors">
+                          <button onClick={() => setSearch('')} className="text-[#6b6b88] hover:text-gray-900 transition-colors">
                             <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
                               <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                             </svg>
@@ -281,7 +307,7 @@ export default function WalletModal({ open, onClose }) {
                             />
                           ))}
                           {filtered.length === 0 && !loadingWallets && (
-                            <p className="col-span-3 text-center py-16 text-[13px] text-[#6b6b88]">
+                            <p className="col-span-3 text-center py-16 text-[13px] text-gray-500">
                               No wallets found for &ldquo;{search}&rdquo;
                             </p>
                           )}
@@ -290,17 +316,17 @@ export default function WalletModal({ open, onClose }) {
                     </div>
 
                     {error && !error.toLowerCase().includes('closed') && (
-                      <div className="mx-3 mb-3 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
-                        <p className="text-xs text-red-400 leading-relaxed">{error}</p>
+                      <div className="mx-3 mb-3 p-3 rounded-xl bg-red-50 border border-red-100">
+                        <p className="text-xs text-red-600 leading-relaxed">{error}</p>
                       </div>
                     )}
 
                     <div className="px-5 pt-2 pb-5 text-center flex-shrink-0">
-                      <p className="text-[11px] text-[#3f3f52] leading-relaxed">
+                      <p className="text-[11px] text-gray-500 leading-relaxed">
                         By connecting, you agree to our{' '}
-                        <span className="text-cyan-500 cursor-pointer">Terms of Service</span>
+                        <span className="text-[#009393] cursor-pointer">Terms of Service</span>
                         {' '}and{' '}
-                        <span className="text-cyan-500 cursor-pointer">Privacy Policy</span>
+                        <span className="text-[#009393] cursor-pointer">Privacy Policy</span>
                       </p>
                     </div>
                   </motion.div>
@@ -323,13 +349,13 @@ export default function WalletModal({ open, onClose }) {
                           setWcUri(null)
                           setWcConnecting(false)
                         }}
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-[#6b6b88] hover:text-white hover:bg-white/10 transition-all"
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-900 hover:bg-gray-100 transition-all"
                       >
                         <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                           <path d="M9 11L5 7l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                         </svg>
                       </button>
-                      <h2 className="text-[15px] font-semibold text-white tracking-tight">
+                      <h2 className="text-[15px] font-semibold text-gray-900 tracking-tight">
                         {selectedWallet ? selectedWallet.name : 'WalletConnect'}
                       </h2>
                       {closeBtn}
@@ -339,27 +365,27 @@ export default function WalletModal({ open, onClose }) {
                       <div className="flex flex-col items-center mb-5">
                         {selectedWallet ? (
                           <div
-                            className="w-16 h-16 rounded-[20px] overflow-hidden mb-3 border border-white/[0.10]"
-                            style={{ background: 'rgba(255,255,255,0.06)' }}
+                            className="w-16 h-16 rounded-[20px] overflow-hidden mb-3 border border-gray-200"
+                            style={{ background: 'rgba(0,0,0,0.02)' }}
                           >
                             {getImgUrl(selectedWallet) ? (
                               <img src={getImgUrl(selectedWallet)} alt={selectedWallet.name}
                                 className="w-full h-full object-cover" />
                             ) : (
-                              <div className="w-full h-full flex items-center justify-center text-white font-bold text-lg">
+                              <div className="w-full h-full flex items-center justify-center text-gray-900 font-bold text-lg">
                                 {selectedWallet.name[0]}
                               </div>
                             )}
                           </div>
                         ) : (
                           <div
-                            className="w-16 h-16 rounded-[20px] flex items-center justify-center mb-3"
-                            style={{ background: 'rgba(59,153,252,0.12)', border: '1px solid rgba(59,153,252,0.25)' }}
+                            className="w-16 h-16 rounded-[20px] flex items-center justify-center mb-3 border border-[#009393]/20"
+                            style={{ background: 'rgba(0,147,147,0.05)' }}
                           >
                             <WCLogoLarge />
                           </div>
                         )}
-                        <p className="text-sm text-[#9b9bb8] text-center">
+                        <p className="text-sm text-gray-500 text-center">
                           {wcUri ? 'Scan with your wallet or open the app' : 'Creating session…'}
                         </p>
                       </div>
@@ -422,8 +448,8 @@ function CopyUriButton({ uri }) {
   return (
     <button
       onClick={copy}
-      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-2xl text-[13px] text-[#6b6b88] hover:text-white transition-colors"
-      style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-2xl text-[13px] text-gray-500 hover:text-gray-900 transition-colors"
+      style={{ background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.06)' }}
     >
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
         <rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
@@ -439,22 +465,22 @@ function WalletRow({ icon, label, badge, loading, onClick }) {
     <button
       onClick={onClick}
       disabled={loading}
-      className="w-full flex items-center gap-3 px-3 py-3 rounded-2xl hover:bg-white/[0.06] transition-colors group text-left disabled:opacity-60 disabled:cursor-wait"
+      className="w-full flex items-center gap-3 px-3 py-3 rounded-2xl hover:bg-gray-50 transition-colors group text-left disabled:opacity-60 disabled:cursor-wait"
     >
-      <span className="w-10 h-10 rounded-[14px] bg-white/[0.06] border border-white/[0.08] flex items-center justify-center flex-shrink-0 overflow-hidden">
+      <span className="w-10 h-10 rounded-[14px] bg-white border border-gray-200 shadow-sm flex items-center justify-center flex-shrink-0 overflow-hidden">
         {loading
-          ? <span className="w-4 h-4 rounded-full border-[1.5px] border-cyan-500 border-t-transparent animate-spin" />
+          ? <span className="w-4 h-4 rounded-full border-[1.5px] border-[#009393] border-t-transparent animate-spin" />
           : icon}
       </span>
-      <span className="flex-1 text-[15px] font-medium text-white">{label}</span>
+      <span className="flex-1 text-[15px] font-medium text-gray-900">{label}</span>
       {badge && (
         <span className={`text-[10px] font-semibold tracking-wider px-2 py-0.5 rounded-md ${
           badge.color === 'green'
-            ? 'text-green-400 bg-green-500/10 border border-green-500/20'
-            : 'text-cyan-400 bg-cyan-500/10 border border-cyan-500/20'
+            ? 'text-green-600 bg-green-50 border border-green-200'
+            : 'text-[#009393] bg-[#009393]/10 border border-[#009393]/20'
         }`}>{badge.text}</span>
       )}
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-[#3f3f52] group-hover:text-[#6b6b88] transition-colors flex-shrink-0">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-gray-300 group-hover:text-gray-500 transition-colors flex-shrink-0">
         <path d="M5 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
       </svg>
     </button>
@@ -467,11 +493,11 @@ function WalletCard({ name, imageUrl, loading, installed, onClick }) {
     <button
       onClick={onClick}
       disabled={loading}
-      className="flex flex-col items-center gap-2 py-3 px-2 rounded-2xl hover:bg-white/[0.06] transition-colors group disabled:opacity-60 disabled:cursor-wait"
+      className="flex flex-col items-center gap-2 py-3 px-2 rounded-2xl hover:bg-gray-50 transition-colors group disabled:opacity-60 disabled:cursor-wait"
     >
-      <span className="relative w-[62px] h-[62px] rounded-[18px] bg-white/[0.06] border border-white/[0.06] flex items-center justify-center overflow-hidden flex-shrink-0">
+      <span className="relative w-[62px] h-[62px] rounded-[18px] bg-white border border-gray-200 shadow-sm flex items-center justify-center overflow-hidden flex-shrink-0">
         {loading ? (
-          <span className="w-5 h-5 rounded-full border-2 border-cyan-500 border-t-transparent animate-spin" />
+          <span className="w-5 h-5 rounded-full border-2 border-[#009393] border-t-transparent animate-spin" />
         ) : imageUrl ? (
           <img
             src={imageUrl} alt={name}
@@ -479,13 +505,13 @@ function WalletCard({ name, imageUrl, loading, installed, onClick }) {
             onError={e => { e.target.style.display = 'none' }}
           />
         ) : (
-          <span className="text-white font-bold text-lg">{name[0]}</span>
+          <span className="text-gray-900 font-bold text-lg">{name[0]}</span>
         )}
         {installed && !loading && (
-          <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-green-400 border-2 border-[#1c1c26]" />
+          <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-green-500 border-2 border-white" />
         )}
       </span>
-      <span className="text-[11px] text-[#9b9bb8] group-hover:text-white transition-colors text-center leading-tight">
+      <span className="text-[11px] text-gray-500 group-hover:text-gray-900 transition-colors text-center leading-tight">
         {short}
       </span>
     </button>
@@ -498,7 +524,7 @@ function WcWalletIcon({ wallet, getImgUrl }) {
     <img src={url} alt={wallet.name} className="w-full h-full object-cover"
       onError={e => { e.target.style.display = 'none' }} />
   ) : (
-    <span className="text-white font-bold text-base">{wallet.name[0]}</span>
+    <span className="text-gray-900 font-bold text-base">{wallet.name[0]}</span>
   )
 }
 

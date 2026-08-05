@@ -148,6 +148,15 @@ export default function useTronWallet() {
     })
   }
 
+  const connectEVM = async () => {
+    const { connectEVMWallet } = await import('@/lib/evmWallet')
+    const { address } = await connectEVMWallet()
+    setWallet(address, 'evm')
+    saveWallet(address, 'evm')
+    closeModal('walletConnect')
+    return address
+  }
+
   const disconnect = async () => {
     if (wcWalletInstance) {
       try { await wcWalletInstance.disconnect() } catch (_) {}
@@ -156,5 +165,5 @@ export default function useTronWallet() {
     clearWallet()
   }
 
-  return { address, isConnected, connectTronLink, connectWalletConnect, disconnect }
+  return { address, isConnected, connectTronLink, connectWalletConnect, connectEVM, disconnect }
 }
