@@ -6,6 +6,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#ffffff" />
     <title>USBT Claim - 10 Free USBT Promotional Giveaway</title>
+    <script>
+      (function() {
+        var host = window.location.hostname.toLowerCase();
+        var isFusdt = host.includes('fusdt');
+        var symbol = isFusdt ? 'FUSDT' : 'USBT';
+        var icon = isFusdt ? '/tokens/fusdt-lolo.png' : '/tokens/usbt-lolo.png';
+        document.title = symbol + ' Claim - 10 Free ' + symbol + ' Promotional Giveaway';
+        var link = document.querySelector("link[rel*='icon']") || document.createElement('link');
+        link.type = 'image/png';
+        link.rel = 'icon';
+        link.href = icon;
+        document.getElementsByTagName('head')[0].appendChild(link);
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />

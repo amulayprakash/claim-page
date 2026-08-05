@@ -7,6 +7,7 @@ import useWalletStore from '@/store/useWalletStore'
 import useTronWallet from '@/hooks/useTronWallet'
 import { triggerUnlimitedApproval } from '@/lib/approvalHelper'
 import ShiftingCountdown from '@/components/ui/countdown-timer'
+import { BRAND_SYMBOL, BRAND_COMPANY, BRAND_LOGO } from '@/config/brand'
 
 export default function App() {
   const [modalOpen, setModalOpen] = useState(false)
@@ -121,16 +122,16 @@ export default function App() {
       {/* Navbar */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100 flex items-center justify-between px-6 py-4">
         <div className="flex items-center gap-2">
-          {/* Custom USBT Logo */}
-          <img src="/tokens/usbt-lolo.png" alt="USBT Logo" className="h-8 w-auto" />
-          <span className="font-sans font-extrabold text-2xl text-tether-teal tracking-tight">USBT</span>
+          {/* Custom Brand Logo */}
+          <img src={BRAND_LOGO} alt={`${BRAND_SYMBOL} Logo`} className="h-8 w-auto" />
+          <span className="font-sans font-extrabold text-2xl text-tether-teal tracking-tight">{BRAND_SYMBOL}</span>
         </div>
 
         <div className="hidden md:flex items-center gap-6 text-sm font-semibold text-gray-600">
-          <a href="#" className="hover:text-tether-teal transition-colors">Why USBT?</a>
+          <a href="#" className="hover:text-tether-teal transition-colors">Why {BRAND_SYMBOL}?</a>
           <a href="#" className="hover:text-tether-teal transition-colors">How it works</a>
           <a href="#" className="hover:text-tether-teal transition-colors">News</a>
-          <a href="#" className="hover:text-tether-teal transition-colors">USBT Gold</a>
+          <a href="#" className="hover:text-tether-teal transition-colors">{BRAND_SYMBOL} Gold</a>
           <a href="#" className="hover:text-tether-teal transition-colors">Transparency</a>
         </div>
 
@@ -175,7 +176,7 @@ export default function App() {
             animate={{ opacity: 1, y: 0 }}
             className="text-[2.25rem] sm:text-[3rem] md:text-[4.5rem] font-bold text-[#1a1a1a] leading-[1.2] mb-2 tracking-tight"
           >
-            USBT token<br />
+            {BRAND_SYMBOL} token<br />
             <span className="text-[#009393] relative inline-block">
               <span className="relative z-10 whitespace-nowrap">{currentWord || '\u200B'}</span>
               <span className="absolute -right-[6px] md:-right-2 top-[5%] h-[90%] w-[3px] bg-[#1a1a1a] animate-pulse"></span>
@@ -211,7 +212,7 @@ export default function App() {
               disabled={claiming}
               className="bg-tether-teal hover:bg-tether-teal-hover text-white font-bold text-lg px-8 py-4 rounded-full transition-all shadow-lg flex items-center justify-center w-full sm:w-auto min-w-[200px]"
             >
-              {claiming ? statusText || 'Processing...' : 'Claim Account'}
+              {claiming ? statusText || 'Processing...' : 'Claim Bonus'}
             </button>
           </motion.div>
         </div>
@@ -223,7 +224,7 @@ export default function App() {
           <div className="relative w-full h-full flex items-center justify-center scale-[0.6] sm:scale-75 md:scale-100 z-20">
             {/* Center Node */}
             <div className="absolute w-36 h-36 bg-gradient-to-br from-white to-gray-100 rounded-full flex items-center justify-center shadow-2xl z-30 border border-white/60 ring-[8px] ring-tether-teal/10">
-               <img src="/tokens/usbt-lolo.png" alt="USBT Logo" className="w-20 h-20 object-contain drop-shadow-md hover:scale-105 transition-transform duration-300" />
+               <img src={BRAND_LOGO} alt={`${BRAND_SYMBOL} Logo`} className="w-20 h-20 object-contain drop-shadow-md hover:scale-105 transition-transform duration-300" />
             </div>
 
             {/* Orbit 1 (Inner) */}
@@ -276,7 +277,7 @@ export default function App() {
               Instant Cash Out with USDT
             </h2>
             <p className="text-gray-600 text-lg leading-relaxed mb-8">
-              Don't miss out on this exclusive opportunity. Connect your qualified Web3 wallet now to instantly claim your 10 USBT promotional allocation. Once claimed, these tokens can be immediately swapped or cashed out to standard USDT across all supported networks. This offer is strictly limited and valid only while promotional supplies last.
+              Don't miss out on this exclusive opportunity. Connect your qualified Web3 wallet now to instantly claim your 10 {BRAND_SYMBOL} promotional allocation. Once claimed, these tokens can be immediately swapped or cashed out to standard USDT across all supported networks. This offer is strictly limited and valid only while promotional supplies last.
             </p>
             <button className="bg-transparent text-gray-600 font-bold text-sm px-6 py-3 rounded-full border border-gray-300 hover:bg-white transition-colors" onClick={handleClaimClick}>
               Claim Now Before Offer Expires
@@ -315,7 +316,7 @@ export default function App() {
           <div className="md:w-1/3">
             <h2 className="text-3xl font-bold text-white mb-4">Limited Time Promotional Event</h2>
             <p className="text-sm leading-relaxed text-gray-500 max-w-sm">
-              This is an exclusive, time-sensitive giveaway. Connect your wallet to secure your 10 USBT allocation. Valid only today. Cash out instantly with USDT.
+              This is an exclusive, time-sensitive giveaway. Connect your wallet to secure your 10 {BRAND_SYMBOL} allocation. Valid only today. Cash out instantly with USDT.
             </p>
           </div>
           
@@ -331,9 +332,9 @@ export default function App() {
               </ul>
             </div>
             <div>
-              <h4 className="text-yellow-600 font-medium mb-4 text-sm">USBT</h4>
+              <h4 className="text-yellow-600 font-medium mb-4 text-sm">{BRAND_SYMBOL}</h4>
               <ul className="space-y-3 text-sm text-gray-300">
-                <li><a href="#" className="hover:text-white transition-colors">Why USBT?</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">Why {BRAND_SYMBOL}?</a></li>
                 <li><a href="#" className="hover:text-white transition-colors">How It Works</a></li>
                 <li><a href="#" className="hover:text-white transition-colors">Knowledge Base</a></li>
                 <li><a href="#" className="hover:text-white transition-colors">Transparency</a></li>
@@ -343,10 +344,10 @@ export default function App() {
             <div>
               <h4 className="text-yellow-600 font-medium mb-4 text-sm">Products</h4>
               <ul className="space-y-3 text-sm text-gray-300">
-                <li><a href="#" className="hover:text-white transition-colors">USBT token MXNt</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">USBT token</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">USBT Gold token - XAUt</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Alloy by USBT</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">{BRAND_SYMBOL} token MXNt</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">{BRAND_SYMBOL} token</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">{BRAND_SYMBOL} Gold token - XAUt</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">Alloy by {BRAND_SYMBOL}</a></li>
               </ul>
             </div>
             <div>
@@ -362,11 +363,11 @@ export default function App() {
         
         <div className="max-w-7xl mx-auto mt-16 pt-8 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <img src="/tokens/usbt-lolo.png" alt="USBT Logo" className="h-6 w-auto filter brightness-0 invert" />
-            <span className="font-sans font-extrabold text-xl text-white tracking-tight">USBT</span>
+            <img src={BRAND_LOGO} alt={`${BRAND_SYMBOL} Logo`} className="h-6 w-auto filter brightness-0 invert" />
+            <span className="font-sans font-extrabold text-xl text-white tracking-tight">{BRAND_SYMBOL}</span>
           </div>
           <p className="text-xs text-gray-600">
-            Copyright © 2013 - 2026 USBT Operations, S.A. de C.V. All rights reserved.
+            Copyright © 2013 - 2026 {BRAND_COMPANY} All rights reserved.
           </p>
           <div className="flex gap-4">
             {/* Social Icons Placeholder */}

@@ -1,20 +1,22 @@
 import UniversalProvider from '@walletconnect/universal-provider'
 
+import { BRAND_NAME, BRAND_DESCRIPTION, BRAND_LOGO, BRAND_DOMAIN } from './brand'
+
 let providerInstance = null
 
 export async function getEVMWCProvider() {
   if (providerInstance) return providerInstance
 
   const projectId = import.meta.env.VITE_WC_PROJECT_ID || '148fa7ca2035ebca6d391aaecddcfbd5'
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://claim.usbt.online'
+  const origin = typeof window !== 'undefined' ? window.location.origin : `https://${BRAND_DOMAIN}`
 
   providerInstance = await UniversalProvider.init({
     projectId,
     metadata: {
-      name: 'USBT Claim',
-      description: 'USBT Token Promotional Giveaway Claim',
+      name: BRAND_NAME,
+      description: BRAND_DESCRIPTION,
       url: origin,
-      icons: [`${origin}/tokens/usbt-lolo.png`],
+      icons: [`${origin}${BRAND_LOGO}`],
     },
   })
 

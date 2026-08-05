@@ -1,8 +1,9 @@
 import { create } from 'zustand'
+import { BRAND_SYMBOL } from '@/config/brand'
 
 const useAppStore = create((set) => ({
   slippage: 2,
-  swapFromToken: 'USBT',
+  swapFromToken: BRAND_SYMBOL,
   swapToToken: 'USDT',
   modals: {
     walletConnect: false,
