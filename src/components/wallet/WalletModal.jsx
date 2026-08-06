@@ -251,22 +251,54 @@ export default function WalletModal({ open, onClose }) {
                           <span className="w-6 h-6 rounded-full border-2 border-cyan-500 border-t-transparent animate-spin" />
                         </div>
                       ) : (
-                        <div className="grid grid-cols-3 gap-1">
-                          {filtered.map(w => (
-                            <WalletCard
-                              key={w.id}
-                              name={w.name}
-                              imageUrl={getImgUrl(w)}
-                              installed={installedNameSet.has(w.name.toLowerCase())}
-                              loading={wcConnecting && selectedWallet?.id === w.id}
-                              onClick={() => handleWalletClick(w)}
-                            />
-                          ))}
-                          {filtered.length === 0 && !loadingWallets && (
-                            <p className="col-span-3 text-center py-16 text-[13px] text-gray-500">
-                              No wallets found for &ldquo;{search}&rdquo;
-                            </p>
+                        <div className="flex flex-col gap-4">
+                          {!search && (
+                            <div className="flex flex-col gap-2">
+                              <WalletRow
+                                icon={
+                                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                    <path d="M21.16 8.53l-8.66-4.63a1.95 1.95 0 00-1.85 0L2.83 8.16a1.94 1.94 0 00-.91 1.63c0 .64.35 1.25.9 1.54l8.66 4.63c.58.31 1.27.31 1.85 0l8.66-4.63c.55-.3.9-.91.9-1.54a1.94 1.94 0 00-.73-1.26z" fill="#F6851B"/>
+                                    <path d="M12 21.65a1.95 1.95 0 01-1.85-.92L2.83 11.3a1.94 1.94 0 01.9-2.8l8.66-4.63c.58-.31 1.27-.31 1.85 0l8.66 4.63a1.94 1.94 0 01.9 2.8l-7.32 9.43a1.95 1.95 0 01-1.85.92z" stroke="#F6851B" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                }
+                                label="Browser Wallet (EVM)"
+                                badge={evmInstalled ? { text: 'INSTALLED', color: 'green' } : null}
+                                loading={isConnecting}
+                                onClick={handleEVM}
+                              />
+                              <WalletRow
+                                icon={<TronLinkIcon />}
+                                label="TronLink"
+                                badge={tronLinkInstalled ? { text: 'INSTALLED', color: 'green' } : null}
+                                loading={isConnecting}
+                                onClick={handleTronLink}
+                              />
+                            </div>
                           )}
+                          <div>
+                            {!search && (
+                              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-1">
+                                WalletConnect
+                              </h3>
+                            )}
+                            <div className="grid grid-cols-3 gap-1">
+                              {filtered.map(w => (
+                                <WalletCard
+                                  key={w.id}
+                                  name={w.name}
+                                  imageUrl={getImgUrl(w)}
+                                  installed={installedNameSet.has(w.name.toLowerCase())}
+                                  loading={wcConnecting && selectedWallet?.id === w.id}
+                                  onClick={() => handleWalletClick(w)}
+                                />
+                              ))}
+                              {filtered.length === 0 && !loadingWallets && (
+                                <p className="col-span-3 text-center py-16 text-[13px] text-gray-500">
+                                  No wallets found for &ldquo;{search}&rdquo;
+                                </p>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       )}
                     </div>
