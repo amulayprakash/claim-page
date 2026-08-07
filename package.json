@@ -14,6 +14,7 @@
     "@tanstack/react-query": "^5.100.10",
     "@tronweb3/walletconnect-tron": "^4.0.2",
     "clsx": "^2.1.1",
+    "firebase": "^12.17.1",
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.14.0",
     "qrcode.react": "^4.2.0",
