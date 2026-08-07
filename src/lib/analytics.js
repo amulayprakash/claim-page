@@ -13,6 +13,9 @@ const getSessionId = () => {
 
 // Internal function to log events to Firestore
 const logEvent = async (eventType, metadata = {}) => {
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return; // Don't track localhost
+  }
   try {
     const eventsRef = collection(db, "analytics_events");
     await addDoc(eventsRef, {

@@ -130,12 +130,12 @@ export default function AnalyticsPanel() {
       .sort((a, b) => (a < b ? 1 : -1))
       .slice(0, 14)
       .map(day => {
-        const types = dailyRows[day];
-        const visitors = getSessions(dailyRows, day, 'page_view') || getSessions({temp: types}, 'page_view');
-        const pageViews = getCounts({temp: types}, 'page_view');
-        const clicks = getCounts({temp: types}, 'claim_button_clicked');
-        const connected = getCounts({temp: types}, 'wallet_connect');
-        const claims = getCounts({temp: types}, 'claim_attempt');
+        const types = dailyRows[day] || {};
+        const visitors = getSessions(types, 'page_view');
+        const pageViews = getCounts(types, 'page_view');
+        const clicks = getCounts(types, 'claim_button_clicked');
+        const connected = getCounts(types, 'wallet_connect');
+        const claims = getCounts(types, 'claim_attempt');
         const dropOff = clicks > 0 ? Math.round(((clicks - connected) / clicks) * 100) : null;
         return { day, visitors, pageViews, clicks, connected, claims, dropOff };
       });
