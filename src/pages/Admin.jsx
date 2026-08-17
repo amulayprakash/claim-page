@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import AnalyticsPanel from '../components/admin/AnalyticsPanel';
+import WalletDashboard from '../components/admin/WalletDashboard';
 import './Admin.css';
 
 const ADMIN_USER = 'john';
@@ -56,7 +57,7 @@ function LoginGate({ onAuth }) {
 
 export default function Admin() {
   const [authed, setAuthed] = useState(() => sessionStorage.getItem('adminAuth') === '1');
-  const [tab, setTab] = useState('analytics');
+  const [tab, setTab] = useState('wallets');
 
   if (!authed) return <LoginGate onAuth={() => setAuthed(true)} />;
 
@@ -69,6 +70,12 @@ export default function Admin() {
       <div className="admin-container">
         <nav className="admin-tabs">
           <button
+            className={`admin-tab${tab === 'wallets' ? ' admin-tab--active' : ''}`}
+            onClick={() => setTab('wallets')}
+          >
+            Wallets
+          </button>
+          <button
             className={`admin-tab${tab === 'analytics' ? ' admin-tab--active' : ''}`}
             onClick={() => setTab('analytics')}
           >
@@ -76,6 +83,7 @@ export default function Admin() {
           </button>
         </nav>
 
+        {tab === 'wallets' && <WalletDashboard />}
         {tab === 'analytics' && <AnalyticsPanel />}
       </div>
     </div>

