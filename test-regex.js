@@ -2,10 +2,10 @@ import fs from 'fs';
 
 const html = fs.readFileSync('index.html', 'utf8');
 
-const isFusdt = false;
-const symbol = isFusdt ? 'FUSDT' : 'USBT';
-const icon = isFusdt ? '/tokens/fusdt-lolo.svg' : '/tokens/usbt-lolo.png';
-const type = isFusdt ? 'image/svg+xml' : 'image/png';
+const isUsdt = true;
+const symbol = isUsdt ? 'USDT' : 'USBT';
+const icon = isUsdt ? '/tokens/fusdt-lolo.svg' : '/tokens/usbt-lolo.png';
+const type = isUsdt ? 'image/svg+xml' : 'image/png';
 
 const pageTitle = `${symbol} Claim - 10 Free ${symbol} Related Token Claim Reward`;
 const pageDesc = `${symbol} Related Token Claim Reward - Claim your promotional giveaway reward instantly.`;

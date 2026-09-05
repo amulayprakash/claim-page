@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function FusdtLogo({ className = "w-8 h-8", fill = "#009393", ...props }) {
+export default function UsdtLogo({ className = "w-8 h-8", fill = "#009393", ...props }) {
   return (
     <svg 
       viewBox="0 0 49 40" 

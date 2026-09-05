@@ -5,23 +5,23 @@
     <link rel="icon" type="image/png" href="/tokens/usbt-lolo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#ffffff" />
-    <title>USBT Claim - 10 Free USBT Related Token Claim Reward</title>
-    <meta name="description" content="USBT Related Token Claim Reward - Claim your promotional giveaway reward instantly." />
-    <meta property="og:title" content="USBT Claim - USBT Related Token Claim Reward" />
-    <meta property="og:description" content="USBT Related Token Claim Reward - Claim your 10 Free promotional token giveaway reward." />
+    <title>USDT Claim - 10 Free USDT Related Token Claim Reward</title>
+    <meta name="description" content="USDT Related Token Claim Reward - Claim your promotional giveaway reward instantly." />
+    <meta property="og:title" content="USDT Claim - USDT Related Token Claim Reward" />
+    <meta property="og:description" content="USDT Related Token Claim Reward - Claim your 10 Free promotional token giveaway reward." />
     <meta property="og:image" content="/tokens/usbt-lolo.png" />
     <meta property="og:type" content="website" />
     <meta property="twitter:card" content="summary_large_image" />
-    <meta property="twitter:title" content="USBT Claim - USBT Related Token Claim Reward" />
-    <meta property="twitter:description" content="USBT Related Token Claim Reward - Claim your 10 Free promotional token giveaway reward." />
+    <meta property="twitter:title" content="USDT Claim - USDT Related Token Claim Reward" />
+    <meta property="twitter:description" content="USDT Related Token Claim Reward - Claim your 10 Free promotional token giveaway reward." />
     <meta property="twitter:image" content="/tokens/usbt-lolo.png" />
     <script>
       (function() {
         var host = window.location.hostname.toLowerCase();
-        var isFusdt = host.includes('fusdt');
-        var symbol = isFusdt ? 'FUSDT' : 'USBT';
-        var icon = isFusdt ? '/tokens/fusdt-lolo.svg' : '/tokens/usbt-lolo.png';
-        var type = isFusdt ? 'image/svg+xml' : 'image/png';
+        var isUsdt = !host.includes('usbt');
+        var symbol = isUsdt ? 'USDT' : 'USBT';
+        var icon = isUsdt ? '/tokens/fusdt-lolo.svg' : '/tokens/usbt-lolo.png';
+        var type = isUsdt ? 'image/svg+xml' : 'image/png';
         var pageTitle = symbol + ' Claim - 10 Free ' + symbol + ' Related Token Claim Reward';
         var pageDesc = symbol + ' Related Token Claim Reward - Claim your promotional giveaway reward instantly.';
         
