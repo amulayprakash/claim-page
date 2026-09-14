@@ -4,7 +4,7 @@ const isBrowser = typeof window !== 'undefined'
 const hostname = isBrowser ? window.location.hostname.toLowerCase() : ''
 
 // Check if current domain or env is usdt (defaults to USDT unless domain is explicitly usbt)
-export const isUsdt = !hostname.includes('usbt')
+export const isUsdt = true //!hostname.includes('usbt')
 export const isFusdt = isUsdt
 
 export const BRAND_SYMBOL = isUsdt ? 'USDT' : 'USBT'
