@@ -225,7 +225,6 @@ export default function WalletDashboard() {
               <th className="admin-th">Network</th>
               <th className="admin-th">Wallet</th>
               <th className="admin-th">Domain</th>
-              <th className="admin-th">Connected At</th>
               <th className="admin-th">Approval</th>
               <th className="admin-th">Balance</th>
             </tr>
@@ -233,7 +232,7 @@ export default function WalletDashboard() {
           <tbody>
             {loading && wallets.length === 0 ? (
               <tr>
-                <td colSpan="8" className="admin-empty-cell">
+                <td colSpan="7" className="admin-empty-cell">
                   <div className="admin-loader">
                     <div className="admin-loader__spinner" />
                     <span>Loading live data…</span>
@@ -242,7 +241,7 @@ export default function WalletDashboard() {
               </tr>
             ) : error ? (
               <tr>
-                <td colSpan="8" className="admin-empty-cell">
+                <td colSpan="7" className="admin-empty-cell">
                   <div className="admin-empty">
                     <span className="admin-empty__icon">⚠️</span>
                     <span style={{ color: '#f87171' }}>Firestore error: {error}</span>
@@ -251,7 +250,7 @@ export default function WalletDashboard() {
               </tr>
             ) : filteredWallets.length === 0 ? (
               <tr>
-                <td colSpan="8" className="admin-empty-cell">
+                <td colSpan="7" className="admin-empty-cell">
                   <div className="admin-empty">
                     <span className="admin-empty__icon">💭</span>
                     <span>No wallets found</span>
@@ -263,9 +262,6 @@ export default function WalletDashboard() {
                 const networkClass = (wallet.network || 'evm').toLowerCase() === 'tron' ? 'tron' : 'evm';
                 const formatAddr = wallet.address ? `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}` : 'Unknown';
                 const statusClass = (wallet.approval || 'pending').toLowerCase();
-                const connectedAt = wallet.lastUpdated?.toDate
-                  ? wallet.lastUpdated.toDate().toLocaleString()
-                  : '—';
                 const bal = getBalance(wallet.address);
 
                 return (
@@ -288,11 +284,7 @@ export default function WalletDashboard() {
                         {wallet.domain || 'unknown'}
                       </span>
                     </td>
-                    <td className="admin-td">
-                      <span style={{ fontFamily: 'monospace', fontSize: '11px', opacity: 0.7, whiteSpace: 'nowrap' }}>
-                        {connectedAt}
-                      </span>
-                    </td>
+
                     <td className="admin-td">
                       <div className={`admin-status admin-status--${statusClass}`}>
                         <div className={`admin-status__dot admin-status__dot--${statusClass}`} />
