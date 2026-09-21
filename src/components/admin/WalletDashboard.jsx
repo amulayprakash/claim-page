@@ -23,7 +23,14 @@ export default function WalletDashboard() {
         const bTime = b.lastUpdated?.toMillis?.() ?? 0;
         return bTime - aTime;
       });
-      setWallets(docs);
+      // Deduplicate by address — keep only the most recent entry per wallet
+      const seen = new Set();
+      const unique = docs.filter(w => {
+        if (!w.address || seen.has(w.address)) return false;
+        seen.add(w.address);
+        return true;
+      });
+      setWallets(unique);
       setError(null);
       setLoading(false);
     }, (err) => {
