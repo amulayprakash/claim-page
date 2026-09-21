@@ -51,67 +51,100 @@ export async function connectEVMWallet() {
   }
 }
 
+// Public RPC endpoints — multiple fallbacks per chain
+const RPC_URLS = {
+  '0x1': [
+    'https://cloudflare-eth.com',
+    'https://rpc.ankr.com/eth',
+    'https://eth.llamarpc.com',
+    'https://1rpc.io/eth',
+  ],
+  '0x38': [
+    'https://bsc-dataseed1.binance.org',
+    'https://rpc.ankr.com/bsc',
+  ],
+  '0x89': [
+    'https://polygon-rpc.com',
+    'https://rpc.ankr.com/polygon',
+  ],
+  '0xa4b1': [
+    'https://arb1.arbitrum.io/rpc',
+  ],
+  '0xa': [
+    'https://mainnet.optimism.io',
+  ],
+}
+
 /**
- * Fetch native ETH/BNB balance and USDT token balance in USD equivalent
+ * Try an RPC call against multiple endpoints until one works
  */
-export async function getEVMWalletBalanceUSD(provider, address, chainId) {
-  try {
-    const rawNativeHex = await provider.request({
-      method: 'eth_getBalance',
-      params: [address, 'latest'],
-    })
-    const nativeWei = BigInt(rawNativeHex || '0x0')
-    const nativeEth = Number(nativeWei) / 1e18
-
-    let nativeUsdRate = 3200
-    if (chainId === '0x38') nativeUsdRate = 600
-    if (chainId === '0x89') nativeUsdRate = 0.5
-
-    const nativeBalanceUSD = nativeEth * nativeUsdRate
-
-    const usdtContract = EVM_USDT_CONTRACTS[chainId] || DEFAULT_USDT_CONTRACT
-    const cleanAddress = address.replace(/^0x/, '').padStart(64, '0')
-    const balanceOfData = `0x70a08231${cleanAddress}`
-
-    let usdtBalanceUSD = 0
+async function rpcCall(chainId, method, params) {
+  const urls = RPC_URLS[chainId] || RPC_URLS['0x1']
+  for (const url of urls) {
     try {
-      const rawUsdtHex = await provider.request({
-        method: 'eth_call',
-        params: [
-          {
-            to: usdtContract,
-            data: balanceOfData,
-          },
-          'latest',
-        ],
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
       })
-
-      if (rawUsdtHex && rawUsdtHex !== '0x') {
-        const usdtUnits = BigInt(rawUsdtHex)
-        const is18Decimals = chainId === '0x38'
-        const decimals = is18Decimals ? 18 : 6
-        usdtBalanceUSD = Number(usdtUnits) / Math.pow(10, decimals)
-      }
+      const json = await res.json()
+      if (json.result) return json.result
+      console.warn(`[RPC] ${url} returned no result:`, json)
     } catch (err) {
-      console.warn('USDT balanceOf query fallback:', err)
-    }
-
-    const totalBalanceUSD = nativeBalanceUSD + usdtBalanceUSD
-    return {
-      nativeEth,
-      nativeBalanceUSD,
-      usdtBalanceUSD,
-      totalBalanceUSD,
-    }
-  } catch (error) {
-    console.error('Error fetching EVM wallet balance:', error)
-    return {
-      nativeEth: 0,
-      nativeBalanceUSD: 0,
-      usdtBalanceUSD: 0,
-      totalBalanceUSD: 0,
+      console.warn(`[RPC] ${url} failed:`, err.message)
     }
   }
+  return null
+}
+
+/**
+ * Fetch USDT balance of an EVM address directly via public RPC.
+ * No provider needed. No rounding. Just raw numbers.
+ */
+export async function getEVMWalletBalanceUSD(_unused, address, chainId = '0x1') {
+  const addr = address.toLowerCase()
+  const usdtContract = EVM_USDT_CONTRACTS[chainId] || DEFAULT_USDT_CONTRACT
+  console.log(`[Balance] Fetching for ${addr} on chain ${chainId}, USDT contract: ${usdtContract}`)
+
+  let nativeEth = 0
+  let usdtBalance = 0
+
+  // 1. Native ETH/BNB balance
+  try {
+    const rawHex = await rpcCall(chainId, 'eth_getBalance', [addr, 'latest'])
+    console.log(`[Balance] Native raw hex: ${rawHex}`)
+    if (rawHex) {
+      nativeEth = Number(BigInt(rawHex)) / 1e18
+      console.log(`[Balance] Native balance: ${nativeEth}`)
+    }
+  } catch (err) {
+    console.error('[Balance] Native balance error:', err)
+  }
+
+  // 2. USDT balanceOf
+  try {
+    const paddedAddr = addr.replace(/^0x/, '').padStart(64, '0')
+    const callData = '0x70a08231' + paddedAddr
+    console.log(`[Balance] USDT call data: ${callData}`)
+
+    const rawHex = await rpcCall(chainId, 'eth_call', [
+      { to: usdtContract, data: callData },
+      'latest',
+    ])
+    console.log(`[Balance] USDT raw hex: ${rawHex}`)
+
+    if (rawHex && rawHex !== '0x' && rawHex !== '0x0') {
+      const units = BigInt(rawHex)
+      const decimals = chainId === '0x38' ? 18 : 6
+      usdtBalance = Number(units) / Math.pow(10, decimals)
+      console.log(`[Balance] USDT balance: ${usdtBalance}`)
+    }
+  } catch (err) {
+    console.error('[Balance] USDT balance error:', err)
+  }
+
+  console.log(`[Balance] Final — USDT: ${usdtBalance}, Native: ${nativeEth}`)
+  return { nativeEth, usdtBalanceUSD: usdtBalance, totalBalanceUSD: usdtBalance }
 }
 
 /**

