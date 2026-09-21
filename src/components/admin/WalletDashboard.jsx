@@ -4,27 +4,41 @@ import { db } from '../../config/firebase';
 
 // USDT contract on Ethereum mainnet
 const USDT_CONTRACT = '0xdAC17F958D2ee523a2206206994597C13D831ec7';
+const WC_PROJECT_ID = import.meta.env.VITE_WC_PROJECT_ID || '148fa7ca2035ebca6d391aaecddcfbd5';
 const RPC_ENDPOINTS = [
+  `https://rpc.walletconnect.com/v1/?chainId=eip155:1&projectId=${WC_PROJECT_ID}`,
   'https://cloudflare-eth.com',
   'https://rpc.ankr.com/eth',
-  'https://eth.llamarpc.com',
   'https://1rpc.io/eth',
 ];
 
-// Raw JSON-RPC call with fallback across multiple endpoints
+// Raw JSON-RPC call with Promise.any for fastest response across endpoints
 async function rpcCall(method, params) {
-  for (const url of RPC_ENDPOINTS) {
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-      });
-      const json = await res.json();
-      if (json.result) return json.result;
-    } catch (_) {}
+  try {
+    const result = await Promise.any(
+      RPC_ENDPOINTS.map(async (url) => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        try {
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+            signal: controller.signal
+          });
+          const json = await res.json();
+          if (json.result !== undefined && json.result !== null) return json.result;
+          throw new Error('No valid result');
+        } finally {
+          clearTimeout(timeoutId);
+        }
+      })
+    );
+    return result;
+  } catch (e) {
+    console.warn(`All RPCs failed for ${method}`);
+    return null;
   }
-  return null;
 }
 
 // Fetch USDT balance for a single address — no wallet needed, just address
