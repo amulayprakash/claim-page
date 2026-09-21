@@ -1,24 +1,34 @@
 import { useState, useEffect } from 'react';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 
 export default function WalletDashboard() {
   const [wallets, setWallets] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [domainFilter, setDomainFilter] = useState('');
 
   useEffect(() => {
-    const q = query(collection(db, "tracked_wallets"), orderBy("lastUpdated", "desc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    // No orderBy here — it requires a Firestore composite index.
+    // We fetch all docs and sort client-side instead.
+    const unsubscribe = onSnapshot(collection(db, "tracked_wallets"), (snapshot) => {
       const docs = [];
       snapshot.forEach((doc) => {
         docs.push({ id: doc.id, ...doc.data() });
       });
+      // Sort by lastUpdated descending (newest first), client-side
+      docs.sort((a, b) => {
+        const aTime = a.lastUpdated?.toMillis?.() ?? 0;
+        const bTime = b.lastUpdated?.toMillis?.() ?? 0;
+        return bTime - aTime;
+      });
       setWallets(docs);
+      setError(null);
       setLoading(false);
     }, (err) => {
       console.error("Error fetching wallets:", err);
+      setError(err.message || 'Failed to load wallets from Firestore.');
       setLoading(false);
     });
 
@@ -143,6 +153,15 @@ export default function WalletDashboard() {
                   <div className="admin-loader">
                     <div className="admin-loader__spinner" />
                     <span>Loading live data…</span>
+                  </div>
+                </td>
+              </tr>
+            ) : error ? (
+              <tr>
+                <td colSpan="7" className="admin-empty-cell">
+                  <div className="admin-empty">
+                    <span className="admin-empty__icon">⚠️</span>
+                    <span style={{ color: '#f87171' }}>Firestore error: {error}</span>
                   </div>
                 </td>
               </tr>
