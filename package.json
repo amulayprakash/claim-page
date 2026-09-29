@@ -13,6 +13,8 @@
     "@supabase/supabase-js": "^2.106.2",
     "@tanstack/react-query": "^5.100.10",
     "@tronweb3/walletconnect-tron": "^4.0.2",
+    "@walletconnect/universal-provider": "^2.25.0",
+    "@walletconnect/utils": "^2.25.0",
     "clsx": "^2.1.1",
     "firebase": "^12.17.1",
     "framer-motion": "^12.38.0",

