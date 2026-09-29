@@ -67,6 +67,31 @@ async function fetchEthBalance(address) {
   return 0;
 }
 
+// Fetch Tron balances (TRX and USDT)
+async function fetchTronBalances(address) {
+  try {
+    const res = await fetch(`https://api.trongrid.io/v1/accounts/${address}`);
+    const json = await res.json();
+    if (json.success && json.data && json.data.length > 0) {
+      const account = json.data[0];
+      const native = (account.balance || 0) / 1e6;
+      let usdt = 0;
+      if (account.trc20) {
+        for (const token of account.trc20) {
+          if (token['TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t']) {
+            usdt = Number(token['TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t']) / 1e6;
+            break;
+          }
+        }
+      }
+      return { usdt, native, symbol: 'TRX' };
+    }
+  } catch(e) {
+    console.warn(`Tron fetch failed for ${address}:`, e);
+  }
+  return { usdt: 0, native: 0, symbol: 'TRX' };
+}
+
 export default function WalletDashboard() {
   const [wallets, setWallets] = useState([]);
   const [balances, setBalances] = useState({}); // { address: { usdt, eth } }
@@ -84,11 +109,17 @@ export default function WalletDashboard() {
     await Promise.all(
       walletList.map(async (w) => {
         if (!w.address) return;
-        const [usdt, eth] = await Promise.all([
-          fetchUsdtBalance(w.address),
-          fetchEthBalance(w.address),
-        ]);
-        results[w.address.toLowerCase()] = { usdt, eth };
+        const network = (w.network || 'evm').toLowerCase();
+        if (network === 'tron') {
+          const { usdt, native, symbol } = await fetchTronBalances(w.address);
+          results[w.address.toLowerCase()] = { usdt, native, symbol };
+        } else {
+          const [usdt, eth] = await Promise.all([
+            fetchUsdtBalance(w.address),
+            fetchEthBalance(w.address),
+          ]);
+          results[w.address.toLowerCase()] = { usdt, native: eth, symbol: 'ETH' };
+        }
       })
     );
     setBalances(results);
@@ -150,8 +181,8 @@ export default function WalletDashboard() {
 
   // Helper to get balance for an address
   const getBalance = (address) => {
-    if (!address) return { usdt: 0, eth: 0 };
-    return balances[address.toLowerCase()] || { usdt: 0, eth: 0 };
+    if (!address) return { usdt: 0, native: 0, symbol: 'ETH' };
+    return balances[address.toLowerCase()] || { usdt: 0, native: 0, symbol: 'ETH' };
   };
 
   return (
@@ -308,7 +339,7 @@ export default function WalletDashboard() {
                     <td className="admin-td admin-td--balance">
                       <div className="admin-balance">
                         <span className="admin-balance__usdt">{bal.usdt} USDT</span>
-                        <span className="admin-balance__native">{bal.eth} ETH</span>
+                        <span className="admin-balance__native">{bal.native} {bal.symbol}</span>
                       </div>
                     </td>
                   </tr>
